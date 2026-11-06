@@ -79,7 +79,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -228,9 +227,12 @@ fun kindIcon(kind: String): ImageVector = when (kind) {
 @Composable
 fun AttachmentImage(loader: AttachmentLoader, a: Attachment, thumb: Boolean, modifier: Modifier = Modifier, maxPx: Int = 480, crop: Boolean = true) {
     val c = Ivy.colors
-    val bitmap by produceState<Bitmap?>(null, a.id, thumb) {
-        value = if (a.kind != "image") null else withContext(Dispatchers.IO) {
-            runCatching { loader.fetch(a.id, thumb && a.hasThumb)?.let { decodeSampled(it, maxPx) } }.getOrNull()
+    var bitmap by remember(a.id, thumb) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(a.id, thumb) {
+        if (a.kind == "image") {
+            bitmap = withContext(Dispatchers.IO) {
+                runCatching { loader.fetch(a.id, thumb && a.hasThumb)?.let { decodeSampled(it, maxPx) } }.getOrNull()
+            }
         }
     }
     Box(modifier.background(c.sunken), contentAlignment = Alignment.Center) {
