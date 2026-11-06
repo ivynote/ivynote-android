@@ -9,9 +9,11 @@ package app.ivynote.core
  * address without a client release ([OfficialRegions]). [server] is the
  * address in effect now.
  */
-enum class SyncRegion(val id: String, val title: String, address: String) {
-    CN("cn", "中国大陆", "https://web.ivynote.net"),
-    GLOBAL("global", "全球", "https://web.ivynote.app");
+enum class SyncRegion(val id: String, address: String) {
+    CN("cn", "https://web.ivynote.net"),
+    GLOBAL("global", "https://web.ivynote.app");
+
+    val title: String get() = if (this == CN) L10n.s.regionCn else L10n.s.regionGlobal
 
     /** Built into the client; used whenever the website has said nothing else. */
     val defaultServer: ServerAddress = ServerAddress.parse(address)

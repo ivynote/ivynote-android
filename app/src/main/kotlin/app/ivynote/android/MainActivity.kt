@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import app.ivynote.android.ui.IvyTheme
+import app.ivynote.android.ui.ProvideStrings
 import app.ivynote.android.ui.RootScreen
 
 class MainActivity : ComponentActivity() {
@@ -12,7 +13,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
-            IvyTheme { RootScreen() }
+            ProvideStrings { IvyTheme { RootScreen() } }
         }
     }
 }

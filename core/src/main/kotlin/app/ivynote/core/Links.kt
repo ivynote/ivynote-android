@@ -96,7 +96,7 @@ object Links {
      * plain files, an embed for images, video and audio. Brackets leave the name.
      */
     fun embed(id: String, name: String, kind: String): String {
-        val label = name.replace("[", "").replace("]", "").replace("\n", " ").trim().ifEmpty { "附件" }
+        val label = name.replace("[", "").replace("]", "").replace("\n", " ").trim().ifEmpty { L10n.s.attachment }
         return if (kind == "file") "[$label](ivy://res/$id)" else "![$label](ivy://res/$id)"
     }
 }

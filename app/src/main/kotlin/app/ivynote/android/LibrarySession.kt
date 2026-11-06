@@ -88,7 +88,7 @@ class LibrarySession private constructor(
                 val type = resolver.getType(uri)
                     ?: name?.substringAfterLast('.', "")?.lowercase()?.let { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) }
                     ?: "application/octet-stream"
-                (resolver.openInputStream(uri) ?: throw java.io.IOException("无法读取文件")).use { input ->
+                (resolver.openInputStream(uri) ?: throw java.io.IOException(app.ivynote.core.L10n.s.cannotReadFile)).use { input ->
                     tmp.outputStream().use { input.copyTo(it) }
                 }
                 (name ?: fallbackName ?: defaultName(type)) to type

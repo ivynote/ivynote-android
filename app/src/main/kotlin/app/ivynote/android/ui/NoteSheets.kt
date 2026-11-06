@@ -73,6 +73,7 @@ import androidx.compose.ui.window.DialogProperties
 import app.ivynote.android.IvyApp
 import app.ivynote.android.LibrarySession
 import app.ivynote.core.ApiError
+import app.ivynote.core.L10n
 import app.ivynote.core.Links
 import app.ivynote.core.Note
 import app.ivynote.core.Revision
@@ -88,18 +89,19 @@ import java.io.File
 @Composable
 fun BacklinksSheet(engine: SyncEngine, note: Note, onOpen: (String) -> Unit, onDismiss: () -> Unit) {
     val c = Ivy.colors
+    val s = LocalStrings.current
     val revision by engine.revision.collectAsState()
     val links = remember(revision, note.id) { Links.backlinks(note.id, engine.notes.values) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(), containerColor = c.surface) {
         Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("反向链接", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = c.ink)
+            Text(s.backlinks, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = c.ink)
             Spacer(Modifier.width(6.dp))
             Text("${links.size}", fontSize = 13.sp, color = c.faint)
         }
         if (links.isEmpty()) {
             Column(Modifier.padding(24.dp)) {
-                Text("还没有笔记链接到这里", color = c.muted, fontWeight = FontWeight.Medium)
-                Text("在其他笔记中输入 [[${displayTitle(note)}]] 即可链接到这篇笔记。", color = c.faint, fontSize = 13.sp)
+                Text(s.noBacklinks, color = c.muted, fontWeight = FontWeight.Medium)
+                Text(s.noBacklinksHint(displayTitle(note)), color = c.faint, fontSize = 13.sp)
             }
         } else {
             HorizontalDivider(color = c.line, modifier = Modifier.padding(top = 8.dp))
@@ -136,6 +138,7 @@ fun BacklinksSheet(engine: SyncEngine, note: Note, onOpen: (String) -> Unit, onD
 @Composable
 fun HistoryScreen(lib: LibrarySession, note: Note, onDismiss: () -> Unit) {
     val c = Ivy.colors
+    val s = LocalStrings.current
     val context = LocalContext.current
     val api = lib.api
     val scope = rememberCoroutineScope()
@@ -167,23 +170,23 @@ fun HistoryScreen(lib: LibrarySession, note: Note, onDismiss: () -> Unit) {
         Column(Modifier.fillMaxSize().background(c.surface).statusBarsPadding()) {
             Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { if (picked != null) picked = null else onDismiss() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = c.ink2)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = s.back, tint = c.ink2)
                 }
                 Column(Modifier.weight(1f).padding(start = 4.dp)) {
-                    Text("历史版本", style = SerifTitle, fontSize = 18.sp, color = c.ink)
+                    Text(s.history, style = SerifTitle, fontSize = 18.sp, color = c.ink)
                     Text(displayTitle(note), fontSize = 12.sp, color = c.faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 val p = picked
                 if (p != null && p.rev != list?.firstOrNull()?.rev) {
-                    TextButton(enabled = preview != null, onClick = { confirm = true }) { Text("恢复此版本", color = c.ivy, fontWeight = FontWeight.SemiBold) }
+                    TextButton(enabled = preview != null, onClick = { confirm = true }) { Text(s.restoreVersion, color = c.ivy, fontWeight = FontWeight.SemiBold) }
                 }
             }
             val l = list
             when {
-                api == null -> EmptyState(Icons.Outlined.History, "本地笔记库没有历史版本", "历史版本保存在同步服务器上。")
-                error != null && l == null -> EmptyState(Icons.Outlined.WifiOff, "无法载入历史版本", error ?: "")
+                api == null -> EmptyState(Icons.Outlined.History, s.localNoHistory, s.localNoHistoryHint)
+                error != null && l == null -> EmptyState(Icons.Outlined.WifiOff, s.historyLoadFailed, error ?: "")
                 l == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = c.muted) }
-                l.isEmpty() -> EmptyState(Icons.Outlined.History, "暂无历史版本", "编辑并同步后，这里会出现保存过的版本。")
+                l.isEmpty() -> EmptyState(Icons.Outlined.History, s.noHistory, s.noHistoryHint)
                 picked != null -> {
                     val r = preview
                     if (r == null) {
@@ -192,7 +195,7 @@ fun HistoryScreen(lib: LibrarySession, note: Note, onDismiss: () -> Unit) {
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 12.dp).navigationBarsPadding()) {
                             Text(revisionLabel(r, l.first().rev == r.rev), fontSize = 12.5.sp, color = c.faint)
                             Spacer(Modifier.height(8.dp))
-                            Text(r.title.ifBlank { "无标题" }, style = SerifTitle, fontSize = 22.sp, color = if (r.title.isBlank()) c.muted else c.ink)
+                            Text(r.title.ifBlank { s.untitled }, style = SerifTitle, fontSize = 22.sp, color = if (r.title.isBlank()) c.muted else c.ink)
                             Spacer(Modifier.height(12.dp))
                             SelectionContainer {
                                 Text(r.body.orEmpty(), fontFamily = FontFamily.Monospace, fontSize = 13.5.sp, color = c.ink2, lineHeight = 20.sp)
@@ -209,11 +212,11 @@ fun HistoryScreen(lib: LibrarySession, note: Note, onDismiss: () -> Unit) {
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(fullDate(r.createdAt), fontSize = 15.sp, color = c.ink, fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal)
-                                Text(listOf(r.device.ifEmpty { "未知设备" }, formatSize(context, r.size), r.title.ifBlank { "无标题" }).joinToString(" · "),
+                                Text(listOf(r.device.ifEmpty { s.unknownDevice }, formatSize(context, r.size), r.title.ifBlank { s.untitled }).joinToString(" · "),
                                     fontSize = 12.5.sp, color = c.faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                             if (current) {
-                                Text("当前版本", fontSize = 12.sp, color = c.ivyInk,
+                                Text(s.currentVersion, fontSize = 12.sp, color = c.ivyInk,
                                     modifier = Modifier.clip(RoundedCornerShape(50)).background(c.ivySoft).padding(horizontal = 8.dp, vertical = 2.dp))
                             }
                         }
@@ -224,10 +227,10 @@ fun HistoryScreen(lib: LibrarySession, note: Note, onDismiss: () -> Unit) {
     }
     if (confirm) {
         val r = preview
-        ConfirmDialog("恢复此版本？", "当前内容会被替换，但仍会保留在历史版本中。", "恢复", destructive = false, onDismiss = { confirm = false }) {
+        ConfirmDialog(s.restoreVersionTitle, s.restoreVersionMessage, s.restore, destructive = false, onDismiss = { confirm = false }) {
             if (r != null) {
                 lib.engine.updateNote(note.id, SyncEngine.NotePatch(title = r.title, body = r.body.orEmpty()))
-                toast(context, "已恢复为历史版本")
+                toast(context, s.restoredVersion)
                 scope.launch { lib.engine.sync() }
                 onDismiss()
             }
@@ -236,11 +239,11 @@ fun HistoryScreen(lib: LibrarySession, note: Note, onDismiss: () -> Unit) {
 }
 
 private fun revisionLabel(r: Revision, current: Boolean): String =
-    fullDate(r.createdAt) + (if (r.device.isNotEmpty()) " · ${r.device}" else "") + if (current) " · 当前版本" else ""
+    fullDate(r.createdAt) + (if (r.device.isNotEmpty()) " · ${r.device}" else "") + if (current) " · " + L10n.s.currentVersion else ""
 
-/** 2026年11月6日 16:20, for lists where the exact moment matters. */
+/** 2026年11月6日 16:20 / Nov 6, 2026 16:20, for lists where the exact moment matters. */
 fun fullDate(at: Long): String =
-    java.text.SimpleDateFormat("yyyy年M月d日 HH:mm", java.util.Locale.CHINA).format(java.util.Date(at))
+    java.text.SimpleDateFormat(L10n.s.dateTimePattern, L10n.s.locale).format(java.util.Date(at))
 
 @Composable
 private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, hint: String) {
@@ -263,6 +266,7 @@ private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, ti
 @Composable
 fun ShareSheet(lib: LibrarySession, note: Note, onDismiss: () -> Unit) {
     val c = Ivy.colors
+    val s = LocalStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val api = lib.api
@@ -323,7 +327,7 @@ fun ShareSheet(lib: LibrarySession, note: Note, onDismiss: () -> Unit) {
             a.exportNote(note.id, public = true)
         } catch (e: ApiError) {
             if (!e.isTransient) throw e
-            toast(context, "离线中，附件没有替换为公网链接")
+            toast(context, s.offlineNoPublicLinks)
             local
         }
     }
@@ -349,17 +353,17 @@ fun ShareSheet(lib: LibrarySession, note: Note, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = c.surface) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("分享笔记", style = SerifTitle, fontSize = 19.sp, color = c.ink)
+            Text(s.shareNote, style = SerifTitle, fontSize = 19.sp, color = c.ink)
 
             when {
-                api == null -> Text("本地笔记库不能生成公开链接，可以复制或导出笔记。", fontSize = 13.sp, color = c.muted)
+                api == null -> Text(s.localNoShare, fontSize = 13.sp, color = c.muted)
                 loading -> Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = c.muted) }
-                offline -> Text("分享链接需要联网。", fontSize = 13.sp, color = c.muted)
+                offline -> Text(s.shareNeedsNetwork, fontSize = 13.sp, color = c.muted)
                 else -> {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("公开链接", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = c.ink)
-                            Text("拿到链接和访问密码的人可以阅读这篇笔记", fontSize = 12.5.sp, color = c.muted)
+                            Text(s.publicLink, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = c.ink)
+                            Text(s.publicLinkHint, fontSize = 12.5.sp, color = c.muted)
                         }
                         Switch(
                             checked = live || asking && !changing,
@@ -387,64 +391,64 @@ fun ShareSheet(lib: LibrarySession, note: Note, onDismiss: () -> Unit) {
                                 Icon(Icons.Outlined.Lock, null, tint = c.ivy, modifier = Modifier.size(15.dp).padding(top = 2.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    if (share?.enabled == true && share?.hasPassword == false) "这个链接是在要求密码之前创建的，设置密码后才能继续访问。"
-                                    else "为保护你的隐私，公开链接必须设置至少 6 位的访问密码。",
+                                    if (share?.enabled == true && share?.hasPassword == false) s.legacyShare
+                                    else s.needPassword,
                                     fontSize = 12.5.sp, color = c.muted,
                                 )
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 OutlinedTextField(
                                     value = password, onValueChange = { password = it.take(72) }, singleLine = true,
-                                    placeholder = { Text("新密码（至少 6 位）") },
+                                    placeholder = { Text(s.newPasswordPlaceholder) },
                                     textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 15.sp),
                                     isError = err != null,
                                     modifier = Modifier.weight(1f),
                                 )
-                                TextButton(onClick = { password = Share.generatePassword() }) { Text("随机生成") }
+                                TextButton(onClick = { password = Share.generatePassword() }) { Text(s.generate) }
                             }
                             if (err != null) Text(err, color = c.danger, fontSize = 12.sp)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                if (changing) TextButton(onClick = { changing = false; password = "" }) { Text("取消") }
-                                InkButton(if (changing) "保存" else "生成链接", busy = saving, enabled = Share.passwordError(password) == null,
+                                if (changing) TextButton(onClick = { changing = false; password = "" }) { Text(s.cancel) }
+                                InkButton(if (changing) s.save else s.createLink, busy = saving, enabled = Share.passwordError(password) == null,
                                     onClick = { save(enabled = true, newPassword = password) })
                             }
                         }
                     }
-                    val s = share
-                    AnimatedVisibility(live && s != null) {
-                        if (s == null) return@AnimatedVisibility
+                    val sh = share
+                    AnimatedVisibility(live && sh != null) {
+                        if (sh == null) return@AnimatedVisibility
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Row(
                                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.sunken).padding(start = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(link, fontFamily = FontFamily.Monospace, fontSize = 12.5.sp, color = c.ink2, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                TextButton(onClick = { copyText(context, link) }) { Text("复制链接") }
+                                TextButton(onClick = { copyText(context, link) }) { Text(s.copyLink) }
                             }
-                            if (s.expired) Text("分享已过期", color = c.danger, fontSize = 12.sp)
+                            if (sh.expired) Text(s.shareExpired, color = c.danger, fontSize = 12.sp)
                             Row(
                                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.sunken).padding(start = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(Icons.Outlined.Lock, null, tint = c.ivy, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(8.dp))
-                                if (s.password.isNotEmpty()) {
-                                    Text(s.password, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = c.ink, modifier = Modifier.weight(1f))
-                                    IconButton(onClick = { copyText(context, s.password) }) { Icon(Icons.Outlined.ContentCopy, contentDescription = "复制密码", tint = c.ink2, modifier = Modifier.size(16.dp)) }
+                                if (sh.password.isNotEmpty()) {
+                                    Text(sh.password, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = c.ink, modifier = Modifier.weight(1f))
+                                    IconButton(onClick = { copyText(context, sh.password) }) { Icon(Icons.Outlined.ContentCopy, contentDescription = s.copyPassword, tint = c.ink2, modifier = Modifier.size(16.dp)) }
                                 } else {
-                                    Text("已设置访问密码", fontSize = 13.sp, color = c.muted, modifier = Modifier.weight(1f))
+                                    Text(s.passwordSet, fontSize = 13.sp, color = c.muted, modifier = Modifier.weight(1f))
                                 }
-                                if (!changing) TextButton(onClick = { changing = true; password = Share.generatePassword() }) { Text("修改密码", fontSize = 12.5.sp) }
+                                if (!changing) TextButton(onClick = { changing = true; password = Share.generatePassword() }) { Text(s.changePassword, fontSize = 12.5.sp) }
                             }
-                            if (s.password.isNotEmpty()) {
-                                InkButton("复制链接和密码", modifier = Modifier.fillMaxWidth(), onClick = { copyText(context, Share.message(title, link, s.password)) })
+                            if (sh.password.isNotEmpty()) {
+                                InkButton(s.copyLinkAndPassword, modifier = Modifier.fillMaxWidth(), onClick = { copyText(context, Share.message(title, link, sh.password)) })
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("有效期", fontSize = 13.sp, color = c.muted)
+                                Text(s.expires, fontSize = 13.sp, color = c.muted)
                                 Spacer(Modifier.width(8.dp))
-                                ExpiryPicker(s, enabled = !saving) { days -> save(days = days) }
+                                ExpiryPicker(sh, enabled = !saving) { days -> save(days = days) }
                                 Spacer(Modifier.weight(1f))
-                                Text("${s.views} 次访问", fontSize = 12.5.sp, color = c.faint)
+                                Text(s.views(sh.views), fontSize = 12.5.sp, color = c.faint)
                             }
                         }
                     }
@@ -453,22 +457,22 @@ fun ShareSheet(lib: LibrarySession, note: Note, onDismiss: () -> Unit) {
 
             HorizontalDivider(color = c.line)
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("复制或导出", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = c.ink)
+                Text(s.copyOrExport, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = c.ink)
                 Text(
-                    if (api != null && !offline && state.status != app.ivynote.core.SyncState.Status.OFFLINE) "附件会自动公开并替换为公网链接，方便粘贴到博客、公众号等地方。"
-                    else "离线时附件不会替换为公网链接。",
+                    if (api != null && !offline && state.status != app.ivynote.core.SyncState.Status.OFFLINE) s.copyAsHint
+                    else s.copyAsOffline,
                     fontSize = 12.5.sp, color = c.muted,
                 )
             }
             if (exporting) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = c.muted) }
-            SheetAction(Icons.Outlined.ContentCopy, "复制 Markdown", enabled = !exporting) { export { md -> copyText(context, md) } }
-            SheetAction(Icons.Outlined.Share, "发送到其他应用", enabled = !exporting) {
+            SheetAction(Icons.Outlined.ContentCopy, s.copyMarkdown, enabled = !exporting) { export { md -> copyText(context, md) } }
+            SheetAction(Icons.Outlined.Share, s.sendToApp, enabled = !exporting) {
                 export { md ->
                     val intent = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, title).putExtra(Intent.EXTRA_TEXT, md)
                     context.startActivity(Intent.createChooser(intent, title))
                 }
             }
-            SheetAction(Icons.Outlined.FileDownload, "导出 .md 文件", enabled = !exporting) {
+            SheetAction(Icons.Outlined.FileDownload, s.exportMd, enabled = !exporting) {
                 export { md ->
                     val name = title.replace(Regex("[\\\\/:*?\"<>|]"), "-") + ".md"
                     val tmp = File(IvyApp.instance.transferDir(), "export-" + System.nanoTime()).apply { writeText(md) }
@@ -486,16 +490,17 @@ fun ShareSheet(lib: LibrarySession, note: Note, onDismiss: () -> Unit) {
 @Composable
 private fun ExpiryPicker(share: Share, enabled: Boolean, onPick: (Int) -> Unit) {
     val c = Ivy.colors
+    val s = LocalStrings.current
     var open by remember { mutableStateOf(false) }
     val label = when {
-        share.expiresAt == 0L -> "永久有效"
-        else -> "至 " + java.text.SimpleDateFormat("M月d日", java.util.Locale.CHINA).format(java.util.Date(share.expiresAt))
+        share.expiresAt == 0L -> s.neverExpires
+        else -> s.until(java.text.SimpleDateFormat(s.monthDayPattern, s.locale).format(java.util.Date(share.expiresAt)))
     }
     Box {
         Text(label, fontSize = 13.sp, color = if (enabled) c.ivy else c.faint,
             modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = enabled) { open = true }.padding(horizontal = 6.dp, vertical = 4.dp))
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            for ((days, text) in listOf(1 to "1 天", 7 to "7 天", 30 to "30 天", -1 to "永久有效")) {
+            for ((days, text) in listOf(1 to s.days(1), 7 to s.days(7), 30 to s.days(30), -1 to s.neverExpires)) {
                 DropdownMenuItem(text = { Text(text) }, onClick = { open = false; onPick(days) })
             }
         }

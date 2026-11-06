@@ -101,7 +101,7 @@ class SessionStore(
         // The token is no longer valid. Local notes and the outbox are kept
         // (guide 5.1): signing in again resumes syncing them.
         runCatching { store.clear() }
-        _notice.value = if (error.status == 403) error.message ?: "账户不可用" else "登录已过期，请重新登录"
+        _notice.value = if (error.status == 403) error.message ?: L10n.s.accountUnavailable else L10n.s.sessionExpired
         _offline.value = false
         _state.value = State.SignedOut
     }

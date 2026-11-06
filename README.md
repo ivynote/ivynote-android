@@ -75,6 +75,15 @@ repository does not keep a copy.
 - **Search** across titles and bodies, ranked as on the web (guide 11.5).
 - Phones show one pane at a time; tablets and unfolded foldables show the
   shelf beside the note. Light and dark themes follow the system.
+- **Languages**: 简体中文 and English, as on the web (`core/…/Strings.kt`,
+  one interface, so a string missing from a language does not compile).
+  The language follows the system (the first supported one in its list,
+  English otherwise) until one is picked under 语言 · Language (library
+  menu, libraries list, account sheet); the choice is remembered. Signed in
+  to a synced library, the account's language comes first; a new account
+  starts with the language in use when it was registered (`LanguageSettings`).
+  Until the server stores it, the account's language is kept on this device
+  per account; `IvyApp` marks where it will be sent and read.
 
 ## Layout
 

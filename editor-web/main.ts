@@ -3,7 +3,7 @@
 // Kept in step with the Apple client's EditorWeb/main.ts.
 //
 // Kotlin → JS: window.ivy.load / setBody / setTitles / setKinds / setTheme /
-//              setReadonly / focus / command / scrollToLine / insert
+//              setLanguage / setReadonly / focus / command / scrollToLine / insert
 // JS → Kotlin: IvyAndroid.postMessage(JSON.stringify({ type, ... }))
 //   ready              the page can take a document
 //   change {id, body}  the user edited the note
@@ -61,6 +61,17 @@ let kinds: Record<string, string> = {};
 let lastEmitted = '';
 let view: EditorView | null = null;
 const roConf = new Compartment();
+const placeholderConf = new Compartment();
+
+// --- the interface language (setLanguage): the placeholder, and the words
+// formatting wraps around an empty selection ---
+
+const words = {
+	zh: { placeholder: '开始写作…', bold: '加粗', italic: '斜体', strike: '删除线' },
+	en: { placeholder: 'Start writing…', bold: 'bold', italic: 'italic', strike: 'strikethrough' }
+};
+let lang: keyof typeof words = 'zh';
+const w = () => words[lang];
 
 /** Same-origin path the native scheme handler answers with the attachment. */
 function resource(id: string, thumb?: boolean): string {
@@ -95,13 +106,13 @@ function extensions(readonly: boolean) {
 		markdownHighlight,
 		baseTheme,
 		EditorView.lineWrapping,
-		placeholder('开始写作…'),
+		placeholderConf.of(placeholder(w().placeholder)),
 		autocompletion({ override: [wikiCompletion(completions)], icons: false, activateOnTyping: true }),
 		keymap.of([
-			{ key: 'Mod-b', run: (v) => toggleWrap(v, '**', '加粗') },
-			{ key: 'Mod-i', run: (v) => toggleWrap(v, '*', '斜体') },
+			{ key: 'Mod-b', run: (v) => toggleWrap(v, '**', w().bold) },
+			{ key: 'Mod-i', run: (v) => toggleWrap(v, '*', w().italic) },
 			{ key: 'Mod-e', run: (v) => toggleWrap(v, '`', 'code') },
-			{ key: 'Mod-Shift-x', run: (v) => toggleWrap(v, '~~', '删除线') },
+			{ key: 'Mod-Shift-x', run: (v) => toggleWrap(v, '~~', w().strike) },
 			{ key: 'Mod-k', run: insertLink },
 			{ key: 'Mod-Shift-k', run: insertWiki },
 			{ key: 'Mod-Alt-1', run: (v) => toggleLinePrefix(v, '# ') },
@@ -215,6 +226,13 @@ window.ivy = {
 		insertText(view, text, block);
 	},
 
+	/** `zh` or `en`, as the app's interface. */
+	setLanguage(l: string) {
+		lang = l === 'en' ? 'en' : 'zh';
+		document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+		view?.dispatch({ effects: placeholderConf.reconfigure(placeholder(w().placeholder)) });
+	},
+
 	setTheme(dark: boolean) {
 		document.documentElement.dataset.theme = dark ? 'dark' : 'light';
 	},
@@ -241,9 +259,9 @@ window.ivy = {
 	command(name: string) {
 		if (!view) return;
 		switch (name) {
-			case 'bold': toggleWrap(view, '**', '加粗'); break;
-			case 'italic': toggleWrap(view, '*', '斜体'); break;
-			case 'strike': toggleWrap(view, '~~', '删除线'); break;
+			case 'bold': toggleWrap(view, '**', w().bold); break;
+			case 'italic': toggleWrap(view, '*', w().italic); break;
+			case 'strike': toggleWrap(view, '~~', w().strike); break;
 			case 'code': toggleWrap(view, '`', 'code'); break;
 			case 'h1': toggleLinePrefix(view, '# '); break;
 			case 'h2': toggleLinePrefix(view, '## '); break;

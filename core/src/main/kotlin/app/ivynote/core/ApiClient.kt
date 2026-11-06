@@ -153,6 +153,8 @@ class ApiClient(
     fun headers(json: Boolean): Map<String, String> = buildMap {
         put("Accept", "application/json")
         put("User-Agent", IvyHttp.userAgent)
+        // The interface language, so server messages can match it.
+        put("Accept-Language", L10n.language.tag)
         token?.let { put("Authorization", "Bearer $it") }
         if (json) put("Content-Type", "application/json")
     }

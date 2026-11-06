@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -57,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.ivynote.android.IvyApp
+import app.ivynote.core.L10n
 import app.ivynote.core.LibraryRef
 
 /**
@@ -74,6 +76,8 @@ fun LibrariesScreen() {
     var creatingLocal by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<LibraryRef?>(null) }
     var removing by remember { mutableStateOf<LibraryRef?>(null) }
+    var choosingLanguage by remember { mutableStateOf(false) }
+    val s = LocalStrings.current
 
     // "Turn on sync" chosen inside a local library: continue here once it has closed.
     LaunchedEffect(pendingSync) {
@@ -100,9 +104,9 @@ fun LibrariesScreen() {
                 Column(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 12.dp), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     AppLogo(64.dp)
-                    Text(if (libraries.isEmpty()) "常青笔记" else "笔记库", style = SerifTitle, fontSize = 26.sp, color = c.ink)
+                    Text(if (libraries.isEmpty()) s.appName else s.libraries, style = SerifTitle, fontSize = 26.sp, color = c.ink)
                     Text(
-                        if (libraries.isEmpty()) "本地优先的 Markdown 笔记，在手机、电脑和网页间同步。" else "选择要打开的笔记库",
+                        if (libraries.isEmpty()) s.welcome else s.pickLibrary,
                         color = c.muted, fontSize = 14.sp, textAlign = TextAlign.Center,
                     )
                 }
@@ -125,14 +129,14 @@ fun LibrariesScreen() {
                 item {
                     Surface(shape = RoundedCornerShape(16.dp), color = c.surface, modifier = Modifier.padding(top = 8.dp)) {
                         Column {
-                            ActionRow(Icons.Outlined.Cloud, c.ivy, "登录云同步账户", "在多台设备间同步，支持官方节点和自建服务器") { cloud = "" }
+                            ActionRow(Icons.Outlined.Cloud, c.ivy, s.connect, s.connectHint) { cloud = "" }
                             HorizontalDivider(color = c.line, modifier = Modifier.padding(start = 64.dp))
-                            ActionRow(Icons.Outlined.Add, c.muted, "新建本地笔记库", "只保存在这台设备，无需账户，立即可用") { creatingLocal = true }
+                            ActionRow(Icons.Outlined.Add, c.muted, s.newLocal, s.newLocalHint) { creatingLocal = true }
                         }
                     }
                 }
                 if (libraries.any { it.canTurnOnSync }) {
-                    item { Caption("本地笔记库可以随时开启同步：注册新账户后，内容会自动上传。", Modifier.padding(horizontal = 8.dp)) }
+                    item { Caption(s.canConvert, Modifier.padding(horizontal = 8.dp)) }
                 }
             } else {
                 // First run: syncing is the way in; local is the quiet alternative.
@@ -144,8 +148,8 @@ fun LibrariesScreen() {
                             }
                             Spacer(Modifier.width(14.dp))
                             Column(Modifier.weight(1f)) {
-                                Text("开始使用 · 多端同步", color = c.onIvy, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                                Text("登录或注册，笔记在手机、电脑和网页间自动同步", color = c.onIvy.copy(alpha = 0.85f), fontSize = 13.sp)
+                                Text(s.startCloud, color = c.onIvy, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                Text(s.startCloudHint, color = c.onIvy.copy(alpha = 0.85f), fontSize = 13.sp)
                             }
                             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.onIvy)
                         }
@@ -153,31 +157,43 @@ fun LibrariesScreen() {
                 }
                 item {
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        TextButton(onClick = { creatingLocal = true }) { Text("不登录，仅在本机使用", color = c.ink2) }
+                        TextButton(onClick = { creatingLocal = true }) { Text(s.localOnly, color = c.ink2) }
+                    }
+                }
+            }
+            // Language: before signing in, this device's choice.
+            item {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    TextButton(onClick = { choosingLanguage = true }) {
+                        Icon(Icons.Outlined.Language, null, tint = c.muted, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(choiceLabel(IvyApp.instance.language.selected.collectAsState().value, s), color = c.muted, fontSize = 13.sp)
                     }
                 }
             }
         }
     }
 
+    if (choosingLanguage) {
+        LanguageDialog(onDismiss = { choosingLanguage = false })
+    }
     if (creatingLocal) {
         TextInputDialog(
-            title = "新建本地笔记库",
-            initial = if (libraries.isEmpty()) "我的笔记" else "",
-            message = "笔记只保存在这台设备上，不会同步。",
-            confirm = "创建",
+            title = s.newLocal,
+            initial = if (libraries.isEmpty()) s.defaultLibraryName else "",
+            message = s.newLocalMessage,
+            confirm = s.create,
             onDismiss = { creatingLocal = false },
         ) { name -> catalog.createLocal(name) }
     }
     renaming?.let { ref ->
-        TextInputDialog(title = "重命名笔记库", initial = ref.name, onDismiss = { renaming = null }) { name -> catalog.rename(ref.id, name) }
+        TextInputDialog(title = s.renameLibrary, initial = ref.name, onDismiss = { renaming = null }) { name -> catalog.rename(ref.id, name) }
     }
     removing?.let { ref ->
         ConfirmDialog(
-            title = "移除笔记库",
-            message = if (ref.isLocal) "将永久删除「${ref.name}」里的全部笔记，无法恢复。"
-            else "将从这台设备删除「${ref.name}」的本地副本和登录状态。服务器上的笔记不受影响，但尚未同步的更改会丢失。",
-            confirm = "移除",
+            title = s.removeLibrary,
+            message = if (ref.isLocal) s.removeLocalMessage(ref.name) else s.removeServerMessage(ref.name),
+            confirm = s.remove,
             onDismiss = { removing = null },
         ) {
             catalog.remove(ref.id)
@@ -191,6 +207,7 @@ fun LibrariesScreen() {
 private fun LibraryRow(ref: LibraryRef, onOpen: () -> Unit, onTurnOnSync: () -> Unit, onRename: () -> Unit, onRemove: () -> Unit) {
     val c = Ivy.colors
     var menu by remember { mutableStateOf(false) }
+    val s = LocalStrings.current
     Box {
         Row(
             Modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = { menu = true }).padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
@@ -202,23 +219,23 @@ private fun LibraryRow(ref: LibraryRef, onOpen: () -> Unit, onTurnOnSync: () -> 
                 Text(ref.name, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(detail(ref), fontSize = 13.sp, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = "更多", tint = c.faint) }
+            IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = s.more, tint = c.faint) }
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text("打开") }, leadingIcon = { Icon(Icons.Outlined.FolderOpen, null) }, onClick = { menu = false; onOpen() })
+            DropdownMenuItem(text = { Text(s.open) }, leadingIcon = { Icon(Icons.Outlined.FolderOpen, null) }, onClick = { menu = false; onOpen() })
             if (ref.canTurnOnSync) {
-                DropdownMenuItem(text = { Text("开启同步") }, leadingIcon = { Icon(Icons.Outlined.CloudUpload, null) }, onClick = { menu = false; onTurnOnSync() })
+                DropdownMenuItem(text = { Text(s.turnOnSync) }, leadingIcon = { Icon(Icons.Outlined.CloudUpload, null) }, onClick = { menu = false; onTurnOnSync() })
             }
-            DropdownMenuItem(text = { Text("重命名") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onRename() })
+            DropdownMenuItem(text = { Text(s.rename) }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onRename() })
             HorizontalDivider()
-            DropdownMenuItem(text = { Text("移除", color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = c.danger) }, onClick = { menu = false; onRemove() })
+            DropdownMenuItem(text = { Text(s.remove, color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = c.danger) }, onClick = { menu = false; onRemove() })
         }
     }
 }
 
 private fun detail(ref: LibraryRef): String = when {
-    ref.migratedTo != null -> "已迁移到云端，确认无误后可以移除"
-    ref.isLocal -> "仅保存在本机 · 未同步"
+    ref.migratedTo != null -> L10n.s.migratedHint
+    ref.isLocal -> L10n.s.localUnsynced
     else -> {
         val host = ref.server?.host ?: ""
         ref.account?.let { "$host · @$it" } ?: host

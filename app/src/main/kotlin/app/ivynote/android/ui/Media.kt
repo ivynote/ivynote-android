@@ -103,6 +103,7 @@ import app.ivynote.android.LibrarySession
 import app.ivynote.android.editor.AttachmentLoader
 import app.ivynote.core.AddedFile
 import app.ivynote.core.ApiError
+import app.ivynote.core.L10n
 import app.ivynote.core.Attachment
 import app.ivynote.core.AttachmentDetail
 import app.ivynote.core.MediaLibrary
@@ -119,12 +120,12 @@ fun toast(context: Context, text: String, long: Boolean = false) =
 fun copyText(context: Context, text: String, label: String = "ivynote") {
     context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText(label, text))
     // Android 13+ shows its own confirmation.
-    if (android.os.Build.VERSION.SDK_INT < 33) toast(context, "已复制")
+    if (android.os.Build.VERSION.SDK_INT < 33) toast(context, L10n.s.copied)
 }
 
 fun errorText(e: Throwable): String = when (e) {
-    is ApiError.Unreachable -> "需要联网"
-    is ApiError.Server -> if (e.code == 413) "文件超过服务器的上传上限" else e.message ?: "请求失败"
+    is ApiError.Unreachable -> L10n.s.needsNetwork
+    is ApiError.Server -> if (e.code == 413) L10n.s.fileTooLarge else e.message
     else -> e.message ?: e.javaClass.simpleName
 }
 
@@ -165,12 +166,12 @@ fun rememberAttachmentPicker(lib: LibrarySession, onAdded: (AddedFile) -> Unit):
                     try {
                         val added = lib.addFile(u, name)
                         onAdded(added)
-                        if (added.queued) toast(context, "离线中，「${added.name}」将在联网后上传")
-                        else if (added.duplicate) toast(context, "重复文件已合并")
+                        if (added.queued) toast(context, L10n.s.queuedUpload(added.name))
+                        else if (added.duplicate) toast(context, L10n.s.duplicateMerged)
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        toast(context, "无法添加文件：${errorText(e)}", long = true)
+                        toast(context, L10n.s.cannotAddFile(errorText(e)), long = true)
                     }
                 }
             } finally {
@@ -200,14 +201,14 @@ fun rememberAttachmentPicker(lib: LibrarySession, onAdded: (AddedFile) -> Unit):
                 try {
                     camera.launch(shareUri(context, f))
                 } catch (_: android.content.ActivityNotFoundException) {
-                    toast(context, "没有可用的相机应用")
+                    toast(context, L10n.s.noCamera)
                 }
             },
             files = {
                 try {
                     files.launch(arrayOf("*/*"))
                 } catch (_: android.content.ActivityNotFoundException) {
-                    toast(context, "没有可用的文件选择器")
+                    toast(context, L10n.s.noFilePicker)
                 }
             },
         )
@@ -261,6 +262,7 @@ private fun decodeSampled(file: File, maxPx: Int): Bitmap? {
 @Composable
 fun MediaScreen(lib: LibrarySession, onOpenNote: (String) -> Unit, onDismiss: () -> Unit) {
     val c = Ivy.colors
+    val s = LocalStrings.current
     val context = LocalContext.current
     val revision by lib.engine.revision.collectAsState()
     val adding by lib.adding.collectAsState()
@@ -287,16 +289,16 @@ fun MediaScreen(lib: LibrarySession, onOpenNote: (String) -> Unit, onDismiss: ()
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Column(Modifier.fillMaxSize().background(c.canvas).statusBarsPadding()) {
             Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = c.ink2) }
-                Text("媒体库", style = SerifTitle, fontSize = 19.sp, color = c.ink, modifier = Modifier.weight(1f).padding(start = 4.dp))
+                IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = s.back, tint = c.ink2) }
+                Text(s.mediaLibrary, style = SerifTitle, fontSize = 19.sp, color = c.ink, modifier = Modifier.weight(1f).padding(start = 4.dp))
                 if (adding > 0) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = c.muted)
                 var menu by remember { mutableStateOf(false) }
                 Box {
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.Upload, contentDescription = "上传", tint = c.ink2) }
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.Upload, contentDescription = s.upload, tint = c.ink2) }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(text = { Text("图片或视频") }, leadingIcon = { Icon(Icons.Outlined.Image, null) }, onClick = { menu = false; picker.photos() })
-                        DropdownMenuItem(text = { Text("拍照") }, leadingIcon = { Icon(Icons.Outlined.Image, null) }, onClick = { menu = false; picker.camera() })
-                        DropdownMenuItem(text = { Text("文件") }, leadingIcon = { Icon(Icons.Outlined.AttachFile, null) }, onClick = { menu = false; picker.files() })
+                        DropdownMenuItem(text = { Text(s.photoOrVideo) }, leadingIcon = { Icon(Icons.Outlined.Image, null) }, onClick = { menu = false; picker.photos() })
+                        DropdownMenuItem(text = { Text(s.camera) }, leadingIcon = { Icon(Icons.Outlined.Image, null) }, onClick = { menu = false; picker.camera() })
+                        DropdownMenuItem(text = { Text(s.file) }, leadingIcon = { Icon(Icons.Outlined.AttachFile, null) }, onClick = { menu = false; picker.files() })
                     }
                 }
             }
@@ -309,11 +311,11 @@ fun MediaScreen(lib: LibrarySession, onOpenNote: (String) -> Unit, onDismiss: ()
                 Icon(Icons.Outlined.Search, null, tint = c.faint, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Box(Modifier.weight(1f)) {
-                    if (query.isEmpty()) Text("搜索文件名", color = c.faint, fontSize = 15.sp)
+                    if (query.isEmpty()) Text(s.searchFiles, color = c.faint, fontSize = 15.sp)
                     BasicTextField(query, { query = it }, singleLine = true, textStyle = TextStyle(color = c.ink, fontSize = 15.sp),
                         cursorBrush = androidx.compose.ui.graphics.SolidColor(c.ivy), modifier = Modifier.fillMaxWidth())
                 }
-                if (query.isNotEmpty()) Icon(Icons.Outlined.Close, "清除", tint = c.faint, modifier = Modifier.size(18.dp).clip(CircleShape).clickable { query = "" })
+                if (query.isNotEmpty()) Icon(Icons.Outlined.Close, s.clear, tint = c.faint, modifier = Modifier.size(18.dp).clip(CircleShape).clickable { query = "" })
             }
             // Filters
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -329,19 +331,19 @@ fun MediaScreen(lib: LibrarySession, onOpenNote: (String) -> Unit, onDismiss: ()
             }
             val l = listing
             if (l?.offline == true) {
-                Banner(Icons.Outlined.WifiOff, "离线中，显示的是本机同步下来的文件信息，修改需要联网。")
+                Banner(Icons.Outlined.WifiOff, s.mediaOffline)
             } else if (filter == MediaLibrary.Filter.ORPHANED && (l?.items?.isNotEmpty() == true)) {
                 val days = l.orphanDays
-                Banner(Icons.Outlined.Delete, if (days > 0) "${l.items.size} 个文件没有被任何笔记引用，将在 $days 天后自动移入回收站。" else "${l.items.size} 个文件没有被任何笔记引用。")
+                Banner(Icons.Outlined.Delete, if (days > 0) s.orphanBanner(l.items.size, days) else s.orphanBannerNoDays(l.items.size))
             }
             when {
                 error != null && l == null -> Centered(error ?: "")
                 l == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = c.muted) }
                 l.items.isEmpty() -> Centered(
                     when {
-                        query.isNotBlank() -> "没有找到「${query.trim()}」"
-                        filter == MediaLibrary.Filter.TRASH -> "回收站是空的"
-                        else -> "还没有文件。在笔记中插入图片或附件即可自动加入媒体库。"
+                        query.isNotBlank() -> s.noResults(query.trim())
+                        filter == MediaLibrary.Filter.TRASH -> s.mediaTrashEmpty
+                        else -> s.mediaEmpty
                     },
                 )
                 else -> LazyVerticalGrid(
@@ -384,18 +386,19 @@ private fun Centered(text: String) {
 @Composable
 private fun MediaCell(lib: LibrarySession, a: Attachment, onClick: () -> Unit) {
     val c = Ivy.colors
+    val s = LocalStrings.current
     val context = LocalContext.current
     Column(Modifier.clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick)) {
         Box {
             AttachmentImage(lib.editor.media, a, thumb = true, modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(14.dp)))
             if (a.public) {
-                Icon(Icons.Outlined.Public, contentDescription = "已公开", tint = c.surface,
+                Icon(Icons.Outlined.Public, contentDescription = s.isPublic, tint = c.surface,
                     modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(20.dp).clip(CircleShape).background(c.ivy).padding(3.dp))
             }
         }
-        Text(a.name.ifEmpty { "未命名" }, fontSize = 13.sp, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 2.dp, top = 6.dp))
+        Text(a.name.ifEmpty { s.unnamed }, fontSize = 13.sp, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 2.dp, top = 6.dp))
         Text(
-            formatSize(context, a.size) + " · " + if (a.refs > 0) "被 ${a.refs} 篇引用" else "未引用",
+            formatSize(context, a.size) + " · " + if (a.refs > 0) s.refs(a.refs) else s.unreferenced,
             fontSize = 11.5.sp, color = if (a.refs > 0) c.faint else c.warn, maxLines = 1, modifier = Modifier.padding(start = 2.dp),
         )
     }
@@ -406,6 +409,7 @@ private fun MediaCell(lib: LibrarySession, a: Attachment, onClick: () -> Unit) {
 @Composable
 fun MediaDetailSheet(lib: LibrarySession, initial: Attachment, onChanged: () -> Unit, onOpenNote: (String) -> Unit, onDismiss: () -> Unit) {
     val c = Ivy.colors
+    val s = LocalStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var detail by remember { mutableStateOf<AttachmentDetail?>(null) }
@@ -439,7 +443,7 @@ fun MediaDetailSheet(lib: LibrarySession, initial: Attachment, onChanged: () -> 
     fun withFile(block: (File) -> Unit) {
         scope.launch {
             val f = withContext(Dispatchers.IO) { lib.editor.media.fetch(a.id, thumb = false) }
-            if (f == null) toast(context, "无法取得文件，请检查网络") else block(f)
+            if (f == null) toast(context, s.cannotGetFile) else block(f)
         }
     }
 
@@ -459,19 +463,19 @@ fun MediaDetailSheet(lib: LibrarySession, initial: Attachment, onChanged: () -> 
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(a.name.ifEmpty { "未命名" }, style = SerifTitle, fontSize = 18.sp, color = c.ink, modifier = Modifier.weight(1f))
+                Text(a.name.ifEmpty { s.unnamed }, style = SerifTitle, fontSize = 18.sp, color = c.ink, modifier = Modifier.weight(1f))
                 if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = c.muted)
-                if (!a.isTrashed) IconButton(onClick = { renaming = true }) { Icon(Icons.Outlined.Edit, contentDescription = "重命名", tint = c.ink2) }
+                if (!a.isTrashed) IconButton(onClick = { renaming = true }) { Icon(Icons.Outlined.Edit, contentDescription = s.rename, tint = c.ink2) }
             }
-            InfoLine("类型", a.mime.ifEmpty { a.kind })
-            InfoLine("大小", formatSize(context, a.size) + if ((a.width ?: 0) > 0) " · ${a.width}×${a.height}" else "")
-            if (a.createdAt > 0) InfoLine("上传于", shortDate(a.createdAt))
-            if (a.public) InfoLine("公网链接", a.publicUrl.ifEmpty { "已公开（/r/…）" })
-            if (a.isTrashed) InfoLine("回收站", if (a.trashReason == "orphan") "未引用，已自动移入" else "已移入")
+            InfoLine(s.type, a.mime.ifEmpty { a.kind })
+            InfoLine(s.size, formatSize(context, a.size) + if ((a.width ?: 0) > 0) " · ${a.width}×${a.height}" else "")
+            if (a.createdAt > 0) InfoLine(s.uploadedAt, shortDate(a.createdAt))
+            if (a.public) InfoLine(s.publicUrl, a.publicUrl.ifEmpty { s.publicPlaceholder }, mono = true)
+            if (a.isTrashed) InfoLine(s.trash, if (a.trashReason == "orphan") s.trashedOrphan else s.trashedManual)
 
             // The notes that reference it.
             val notes = detail?.notes.orEmpty()
-            Text(if (notes.isEmpty()) "没有笔记引用它" else "被 ${notes.size} 篇笔记引用", fontSize = 13.sp, color = c.muted, fontWeight = FontWeight.Medium)
+            Text(if (notes.isEmpty()) s.noNotesReference else s.referencedBy(notes.size), fontSize = 13.sp, color = c.muted, fontWeight = FontWeight.Medium)
             for (n in notes) {
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(enabled = lib.engine.notes[n.id] != null) { onOpenNote(n.id) }
@@ -480,59 +484,59 @@ fun MediaDetailSheet(lib: LibrarySession, initial: Attachment, onChanged: () -> 
                 ) {
                     Icon(Icons.Outlined.Description, null, tint = c.muted, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(10.dp))
-                    Text(n.title.ifBlank { "无标题" }, color = if (n.title.isBlank()) c.muted else c.ink, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(n.title.ifBlank { s.untitled }, color = if (n.title.isBlank()) c.muted else c.ink, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             HorizontalDivider(color = c.line)
 
             // Actions
-            SheetAction(Icons.Outlined.ContentCopy, "复制引用") {
+            SheetAction(Icons.Outlined.ContentCopy, s.copyReference) {
                 copyText(context, app.ivynote.core.Links.embed(a.id, a.name, a.kind))
             }
             if (!a.isTrashed && media.canPublish) {
-                SheetAction(Icons.Outlined.Link, if (a.public) "复制公网链接" else "生成公网链接") {
+                SheetAction(Icons.Outlined.Link, if (a.public) s.copyPublicUrl else s.makePublicUrl) {
                     act { copyText(context, media.publish(a.id)); detail = detail?.copy(attachment = a.copy(public = true)) ?: AttachmentDetail(a.copy(public = true)) }
                 }
-                if (a.public) SheetAction(Icons.Outlined.LinkOff, "撤销公网链接") {
+                if (a.public) SheetAction(Icons.Outlined.LinkOff, s.revokePublicUrl) {
                     act { val u = media.unpublish(a.id); detail = detail?.copy(attachment = u) ?: AttachmentDetail(u) }
                 }
             }
-            SheetAction(Icons.Outlined.Share, "分享或保存原文件") {
+            SheetAction(Icons.Outlined.Share, s.shareOriginal) {
                 withFile { f -> shareFile(context, f, a.name.ifEmpty { a.id }, a.mime) }
             }
             if (a.isTrashed) {
-                SheetAction(Icons.Outlined.Restore, "恢复") { act { val u = media.restore(a.id); detail = detail?.copy(attachment = u) ?: AttachmentDetail(u) } }
-                SheetAction(Icons.Outlined.DeleteForever, "永久删除", danger = true) { confirmPurge = true }
+                SheetAction(Icons.Outlined.Restore, s.restore) { act { val u = media.restore(a.id); detail = detail?.copy(attachment = u) ?: AttachmentDetail(u) } }
+                SheetAction(Icons.Outlined.DeleteForever, s.deleteForever, danger = true) { confirmPurge = true }
             } else {
-                SheetAction(Icons.Outlined.Delete, "移到回收站", danger = true) {
+                SheetAction(Icons.Outlined.Delete, s.moveToTrash, danger = true) {
                     act { media.trash(a.id); onDismiss() }
                 }
             }
             if (!media.canPublish) {
-                Text("本地笔记库的文件只保存在这台设备上。", fontSize = 12.5.sp, color = c.faint)
+                Text(s.localFilesHint, fontSize = 12.5.sp, color = c.faint)
             } else if (a.public) {
-                Text("公开的文件不再受登录保护，拿到链接的人都能打开。", fontSize = 12.5.sp, color = c.faint)
+                Text(s.publicFilesHint, fontSize = 12.5.sp, color = c.faint)
             }
         }
     }
     if (renaming) {
-        TextInputDialog(title = "重命名文件", initial = a.name, onDismiss = { renaming = false }) { name ->
+        TextInputDialog(title = s.renameFile, initial = a.name, onDismiss = { renaming = false }) { name ->
             act { val u = media.rename(a.id, name); detail = detail?.copy(attachment = u) ?: AttachmentDetail(u) }
         }
     }
     if (confirmPurge) {
-        ConfirmDialog("永久删除文件？", "「${a.name}」将被永久删除，引用它的笔记会显示为缺失。此操作无法撤销。", "永久删除", onDismiss = { confirmPurge = false }) {
+        ConfirmDialog(s.purgeFileTitle, s.purgeFileMessage(a.name), s.deleteForever, onDismiss = { confirmPurge = false }) {
             act { media.purge(a.id); onDismiss() }
         }
     }
 }
 
 @Composable
-private fun InfoLine(label: String, value: String) {
+private fun InfoLine(label: String, value: String, mono: Boolean = false) {
     val c = Ivy.colors
     Row {
         Text(label, fontSize = 13.sp, color = c.muted, modifier = Modifier.width(72.dp))
-        Text(value, fontSize = 13.sp, color = c.ink2, fontFamily = if (label == "公网链接") FontFamily.Monospace else null)
+        Text(value, fontSize = 13.sp, color = c.ink2, fontFamily = if (mono) FontFamily.Monospace else null)
     }
 }
 

@@ -68,8 +68,8 @@ data class Share(
         const val MAX_PASSWORD_BYTES = 72
 
         fun passwordError(p: String): String? = when {
-            p.length < MIN_PASSWORD -> "密码至少 $MIN_PASSWORD 位"
-            p.toByteArray(Charsets.UTF_8).size > MAX_PASSWORD_BYTES -> "密码最多 $MAX_PASSWORD_BYTES 字节"
+            p.length < MIN_PASSWORD -> L10n.s.sharePasswordMin(MIN_PASSWORD)
+            p.toByteArray(Charsets.UTF_8).size > MAX_PASSWORD_BYTES -> L10n.s.sharePasswordMax(MAX_PASSWORD_BYTES)
             else -> null
         }
 
@@ -81,6 +81,6 @@ data class Share(
         }
 
         /** The message the web copies with 复制链接和密码. */
-        fun message(title: String, link: String, password: String): String = "$title\n链接：$link\n密码：$password"
+        fun message(title: String, link: String, password: String): String = L10n.s.shareMessage(title, link, password)
     }
 }

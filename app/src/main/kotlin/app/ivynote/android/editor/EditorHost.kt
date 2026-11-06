@@ -121,6 +121,7 @@ class EditorHost(appContext: Context, private val session: LibrarySession) {
         sendTitles()
         refreshKinds()
         call("ivy.setTheme($dark)")
+        setLanguage(app.ivynote.core.L10n.language)
         val payload = buildJsonObject {
             put("id", note.id)
             put("body", note.body)
@@ -174,6 +175,14 @@ class EditorHost(appContext: Context, private val session: LibrarySession) {
     fun insert(markdown: String) = call("ivy.insert(${JsonPrimitive(markdown)}, true)")
 
     fun setReadonly(ro: Boolean) = call("ivy.setReadonly($ro)")
+
+    /** The placeholder and the words formatting wraps around an empty selection. */
+    fun setLanguage(language: app.ivynote.core.Language) {
+        if (language == sentLanguage) return
+        sentLanguage = language
+        call("ivy.setLanguage(${JsonPrimitive(language.tag)})")
+    }
+    private var sentLanguage: app.ivynote.core.Language? = null
 
     fun setTheme(dark: Boolean) {
         this.dark = dark
@@ -302,6 +311,7 @@ class EditorHost(appContext: Context, private val session: LibrarySession) {
             view.destroy()
             queued.clear()
             sentKinds = ""
+            sentLanguage = null
             _webView.value = create()
             val id = noteId
             val note = id?.let { engine.notes[it] }

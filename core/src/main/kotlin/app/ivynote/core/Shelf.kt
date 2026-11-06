@@ -15,8 +15,14 @@ object Shelf {
     /** Notes shown per branch before a "show more" row. */
     const val PAGE = 100
 
-    enum class SortBy(val label: String) {
-        UPDATED("更新时间"), CREATED("创建时间"), TITLE("标题");
+    enum class SortBy {
+        UPDATED, CREATED, TITLE;
+
+        val label: String get() = when (this) {
+            UPDATED -> L10n.s.sortUpdated
+            CREATED -> L10n.s.sortCreated
+            TITLE -> L10n.s.sortTitle
+        }
     }
 
     enum class Kind { GROUP, HEADING, SECTION, CREATE, FOLDER, TAG, NOTE, MORE }
@@ -159,23 +165,23 @@ object Shelf {
         val pinned = live.filter { it.pinned }
         if (pinned.isNotEmpty()) {
             val open = closedKey(PINNED_KEY) !in expanded
-            rows += Row(key = PINNED_KEY, kind = Kind.SECTION, depth = 0, parent = "", label = "置顶", count = pinned.size,
+            rows += Row(key = PINNED_KEY, kind = Kind.SECTION, depth = 0, parent = "", label = L10n.s.pinned, count = pinned.size,
                 expandable = true, open = open)
             if (open) noteRows(pinned, PINNED_KEY, 0)
         }
 
-        rows += Row(key = "h:notes", kind = Kind.HEADING, depth = 0, parent = "", label = "笔记", folderId = "")
+        rows += Row(key = "h:notes", kind = Kind.HEADING, depth = 0, parent = "", label = L10n.s.notes, folderId = "")
         if (folders.isNotEmpty()) {
             folderRows("", 0)
         } else {
-            rows += Row(key = "h:create", kind = Kind.CREATE, depth = 0, parent = "", label = "新建笔记本")
+            rows += Row(key = "h:create", kind = Kind.CREATE, depth = 0, parent = "", label = L10n.s.createFolderRow)
         }
         // Notes outside any notebook sit below them, like files at the root of a drive.
         noteRows(filed[""].orEmpty(), "", 0, folderId = "")
 
         if (tags.isNotEmpty()) {
             val open = TAGS_KEY in expanded
-            rows += Row(key = TAGS_KEY, kind = Kind.GROUP, depth = 0, parent = "", label = "标签", expandable = true, open = open, gap = true)
+            rows += Row(key = TAGS_KEY, kind = Kind.GROUP, depth = 0, parent = "", label = L10n.s.tags, expandable = true, open = open, gap = true)
             if (open) {
                 for (tag in tags.sortedWith { a, b -> compareTitles(a.name, b.name) }) {
                     val key = "t:" + tag.id
@@ -187,7 +193,7 @@ object Shelf {
                 }
             }
         }
-        group(TRASH_KEY, "回收站", trashed, trash = true, gap = tags.isEmpty())
+        group(TRASH_KEY, L10n.s.trash, trashed, trash = true, gap = tags.isEmpty())
         return rows
     }
 
@@ -239,4 +245,4 @@ object Shelf {
     }
 }
 
-fun displayTitle(n: Note): String = n.title.ifBlank { "无标题" }
+fun displayTitle(n: Note): String = n.title.ifBlank { L10n.s.untitled }

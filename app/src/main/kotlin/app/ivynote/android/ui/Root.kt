@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import app.ivynote.android.IvyApp
 import app.ivynote.android.LibrarySession
 import app.ivynote.core.DocumentStore
+import app.ivynote.core.LanguageSettings
 import app.ivynote.core.LibraryRef
 import app.ivynote.core.SessionStore
 import app.ivynote.core.StoredAccount
@@ -87,6 +88,15 @@ fun OpenLibrary(ref: LibraryRef, account: StoredAccount?, session: SessionStore?
     var library by remember { mutableStateOf<LibrarySession?>(null) }
     var openError by remember { mutableStateOf<String?>(null) }
 
+    // Signed in: the account's language comes first (LanguageSettings).
+    if (account != null) {
+        val key = LanguageSettings.accountKey(account.server, account.user.id)
+        DisposableEffect(key) {
+            app.language.accountOpened(key)
+            onDispose { app.language.accountClosed(key) }
+        }
+    }
+
     LaunchedEffect(ref.id, account?.user?.id) {
         val file = app.catalog.storeFile(ref.id)
         if (account != null) {
@@ -135,9 +145,10 @@ fun OpenLibrary(ref: LibraryRef, account: StoredAccount?, session: SessionStore?
             verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("无法打开本地数据", style = SerifTitle)
+            val s = LocalStrings.current
+            Text(s.cannotOpenData, style = SerifTitle)
             Text(openError ?: "", color = Ivy.colors.muted, textAlign = TextAlign.Center)
-            InkButton("返回笔记库列表", onClick = { app.catalog.open(null) })
+            InkButton(s.backToLibraries, onClick = { app.catalog.open(null) })
         }
     } else {
         Loading()
