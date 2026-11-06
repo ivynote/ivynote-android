@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.ivynote.android.IvyApp
 import app.ivynote.android.LibrarySession
+import app.ivynote.core.L10n
 import app.ivynote.core.SessionStore
 import app.ivynote.core.Shelf
 import app.ivynote.core.displayTitle
@@ -161,7 +162,7 @@ fun LibraryScreen(lib: LibrarySession, session: SessionStore?) {
     val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(refused) {
         val f = refused ?: return@LaunchedEffect
-        toast(context, app.ivynote.core.L10n.s.uploadRefused(f.name, f.message), long = true)
+        toast(context, L10n.s.uploadRefused(f.name, f.message), long = true)
         engine.clearUploadFailure()
     }
 

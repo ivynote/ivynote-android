@@ -9,6 +9,7 @@ import app.ivynote.android.editor.AttachmentLoader
 import app.ivynote.android.editor.EditorHost
 import app.ivynote.android.platform.SqliteDocumentStore
 import app.ivynote.android.platform.networkAvailable
+import app.ivynote.core.L10n
 import app.ivynote.core.AddedFile
 import app.ivynote.core.ApiClient
 import app.ivynote.core.ApiError
@@ -88,7 +89,7 @@ class LibrarySession private constructor(
                 val type = resolver.getType(uri)
                     ?: name?.substringAfterLast('.', "")?.lowercase()?.let { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) }
                     ?: "application/octet-stream"
-                (resolver.openInputStream(uri) ?: throw java.io.IOException(app.ivynote.core.L10n.s.cannotReadFile)).use { input ->
+                (resolver.openInputStream(uri) ?: throw java.io.IOException(L10n.s.cannotReadFile)).use { input ->
                     tmp.outputStream().use { input.copyTo(it) }
                 }
                 (name ?: fallbackName ?: defaultName(type)) to type

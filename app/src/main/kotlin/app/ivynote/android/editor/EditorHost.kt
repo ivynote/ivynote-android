@@ -27,6 +27,8 @@ import androidx.webkit.WebViewFeature
 import app.ivynote.android.BuildConfig
 import app.ivynote.android.IvyApp
 import app.ivynote.android.LibrarySession
+import app.ivynote.core.L10n
+import app.ivynote.core.Language
 import app.ivynote.core.Attachment
 import app.ivynote.core.IvyJson
 import app.ivynote.core.Note
@@ -121,7 +123,7 @@ class EditorHost(appContext: Context, private val session: LibrarySession) {
         sendTitles()
         refreshKinds()
         call("ivy.setTheme($dark)")
-        setLanguage(app.ivynote.core.L10n.language)
+        setLanguage(L10n.language)
         val payload = buildJsonObject {
             put("id", note.id)
             put("body", note.body)
@@ -177,12 +179,12 @@ class EditorHost(appContext: Context, private val session: LibrarySession) {
     fun setReadonly(ro: Boolean) = call("ivy.setReadonly($ro)")
 
     /** The placeholder and the words formatting wraps around an empty selection. */
-    fun setLanguage(language: app.ivynote.core.Language) {
+    fun setLanguage(language: Language) {
         if (language == sentLanguage) return
         sentLanguage = language
         call("ivy.setLanguage(${JsonPrimitive(language.tag)})")
     }
-    private var sentLanguage: app.ivynote.core.Language? = null
+    private var sentLanguage: Language? = null
 
     fun setTheme(dark: Boolean) {
         this.dark = dark

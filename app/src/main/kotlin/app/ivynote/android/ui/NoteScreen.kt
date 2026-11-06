@@ -75,6 +75,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import app.ivynote.core.L10n
 import app.ivynote.core.Links
 import app.ivynote.core.Outline
 import app.ivynote.core.SyncEngine
@@ -124,7 +125,7 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
         host.open(n, focus = n.body.isEmpty() && n.title.isEmpty() && !n.isTrashed)
     }
     LaunchedEffect(dark) { host.setTheme(dark) }
-    LaunchedEffect(s) { host.setLanguage(app.ivynote.core.L10n.language) }
+    LaunchedEffect(s) { host.setLanguage(L10n.language) }
     LaunchedEffect(note.body) { host.bodyChanged(noteId, note.body) }
     LaunchedEffect(note.isTrashed) { host.setReadonly(note.isTrashed) }
     // New and uploaded files: embeds render as their kind.
