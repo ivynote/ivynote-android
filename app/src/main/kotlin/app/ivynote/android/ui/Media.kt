@@ -229,8 +229,7 @@ fun kindIcon(kind: String): ImageVector = when (kind) {
 fun AttachmentImage(loader: AttachmentLoader, a: Attachment, thumb: Boolean, modifier: Modifier = Modifier, maxPx: Int = 480, crop: Boolean = true) {
     val c = Ivy.colors
     val bitmap by produceState<Bitmap?>(null, a.id, thumb) {
-        if (a.kind != "image") return@produceState
-        value = withContext(Dispatchers.IO) {
+        value = if (a.kind != "image") null else withContext(Dispatchers.IO) {
             runCatching { loader.fetch(a.id, thumb && a.hasThumb)?.let { decodeSampled(it, maxPx) } }.getOrNull()
         }
     }
