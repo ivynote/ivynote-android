@@ -102,10 +102,12 @@ fun OpenLibrary(ref: LibraryRef, account: StoredAccount?, session: SessionStore?
         val key = LanguageSettings.accountKey(account.server, account.user.id)
         val scope = rememberCoroutineScope()
         DisposableEffect(key) {
-            app.language.onAccountChoice = { k, _ -> if (k == key) scope.launch { pushLanguage(session, key) } }
+            val send: (String, String) -> Unit = { k, _ -> if (k == key) scope.launch { pushLanguage(session, key) } }
+            app.language.onAccountChoice = send
             scope.launch { pushLanguage(session, key) }
             onDispose {
-                app.language.onAccountChoice = null
+                // Libraries cross-fade: the next one may have set its own already.
+                if (app.language.onAccountChoice === send) app.language.onAccountChoice = null
                 app.language.accountClosed(key)
             }
         }
