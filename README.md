@@ -80,10 +80,11 @@ repository does not keep a copy.
   The language follows the system (the first supported one in its list,
   English otherwise) until one is picked under 语言 · Language (library
   menu, libraries list, account sheet); the choice is remembered. Signed in
-  to a synced library, the account's language comes first; a new account
-  starts with the language in use when it was registered (`LanguageSettings`).
-  Until the server stores it, the account's language is kept on this device
-  per account; `IvyApp` marks where it will be sent and read.
+  to a synced library, the account's language (`User.language`) comes first;
+  choosing there also saves it to the account (`PATCH /me {language}`, kept
+  as pending and sent later when offline; "follow the system" clears it).
+  A new account is registered with the language in use (`language` in
+  `POST /auth/register`). See guide §界面语言 and `LanguageSettings`.
 
 ## Layout
 

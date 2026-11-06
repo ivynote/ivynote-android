@@ -49,6 +49,21 @@ class ApiClientTest {
         assertEquals("application/json", req.headers["Content-Type"])
     }
 
+    @Test fun registerSendsTheInterfaceLanguage() = runTest {
+        val stub = StubTransport(mutableMapOf("POST /api/v1/auth/register" to (200 to """{"token":"tok","user":$USER_JSON}""")))
+        ApiClient(server, transport = stub).register("ivy", "secret123", language = "en")
+        val req = stub.sent.single()
+        assertEquals("""{"username":"ivy","password":"secret123","language":"en"}""", req.body!!.decodeToString())
+        assertEquals(L10n.language.tag, req.headers["Accept-Language"])
+    }
+
+    @Test fun setLanguagePatchesMe() = runTest {
+        val user = USER_JSON.replace("\"features\":{}", "\"features\":{},\"language\":\"en\"")
+        val stub = StubTransport(mutableMapOf("PATCH /api/v1/me" to (200 to user)))
+        assertEquals("en", ApiClient(server, "tok", stub).setLanguage("en").language)
+        assertEquals("""{"language":"en"}""", stub.sent.single().body!!.decodeToString())
+    }
+
     @Test fun errorsCarryTheServerMessage() = runTest {
         val stub = StubTransport(mutableMapOf("GET /api/v1/me" to (401 to """{"error":"unauthorized","status":401}""")))
         val e = assertFailsWith<ApiError.Server> { ApiClient(server, "bad", stub).me() }

@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,6 +81,13 @@ fun LibraryRoot(ref: LibraryRef) {
     }
 }
 
+/** Sends a language change made on this device (maybe offline) to the account. */
+private suspend fun pushLanguage(session: SessionStore, key: String) {
+    val language = IvyApp.instance.language
+    val tag = language.pendingTag(key) ?: return
+    if (session.pushLanguage(tag)) language.pushed(key, tag)
+}
+
 /** Opens a library's database and drives it with the app's foreground and background. */
 @Composable
 fun OpenLibrary(ref: LibraryRef, account: StoredAccount?, session: SessionStore?) {
@@ -88,13 +96,20 @@ fun OpenLibrary(ref: LibraryRef, account: StoredAccount?, session: SessionStore?
     var library by remember { mutableStateOf<LibrarySession?>(null) }
     var openError by remember { mutableStateOf<String?>(null) }
 
-    // Signed in: the account's language comes first (LanguageSettings).
-    if (account != null) {
+    // Signed in: the account's language comes first (LanguageSettings), the
+    // server's value as `/me` last returned it.
+    if (account != null && session != null) {
         val key = LanguageSettings.accountKey(account.server, account.user.id)
+        val scope = rememberCoroutineScope()
         DisposableEffect(key) {
-            app.language.accountOpened(key)
-            onDispose { app.language.accountClosed(key) }
+            app.language.onAccountChoice = { k, _ -> if (k == key) scope.launch { pushLanguage(session, key) } }
+            scope.launch { pushLanguage(session, key) }
+            onDispose {
+                app.language.onAccountChoice = null
+                app.language.accountClosed(key)
+            }
         }
+        LaunchedEffect(key, account.user.language) { app.language.accountOpened(key, account.user.language) }
     }
 
     LaunchedEffect(ref.id, account?.user?.id) {
@@ -121,7 +136,13 @@ fun OpenLibrary(ref: LibraryRef, account: StoredAccount?, session: SessionStore?
             app.foreground.collect { fg ->
                 if (fg) {
                     lib.activate()
-                    session?.let { launch { it.refresh() } }
+                    session?.let { s ->
+                        launch {
+                            s.refresh()
+                            // Back online: a language change made offline goes out now.
+                            account?.let { a -> pushLanguage(s, LanguageSettings.accountKey(a.server, a.user.id)) }
+                        }
+                    }
                 } else {
                     lib.deactivate()
                     if (!ref.isLocal) app.appScope.launch { lib.flush() }

@@ -25,6 +25,8 @@ data class User(
     val role: String = "user",
     val status: String = "active",
     val aiAvailable: Boolean = false,
+    /** The interface language the user chose (`zh`, `en`…); "" follows the device. */
+    val language: String = "",
 ) {
     val name: String get() = displayName.ifEmpty { username }
     val isAdmin: Boolean get() = role == "admin"

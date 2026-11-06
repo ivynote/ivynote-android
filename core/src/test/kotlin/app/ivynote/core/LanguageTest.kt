@@ -51,47 +51,54 @@ class LanguageTest {
     }
 
     @Test
-    fun theAccountsChoiceComesFirst() {
+    fun theAccountsLanguageComesFirst() {
         val s = LanguageSettings(prefs, listOf("zh-CN"))
         s.choose(LanguageChoice.Fixed(Language.ZH))
-        // From the server (once it stores the language).
-        s.accountOpened(alice, serverChoice = LanguageChoice.Fixed(Language.EN))
+        s.accountOpened(alice, serverLanguage = "en")
         assertEquals(Language.EN, s.current.value)
+        assertEquals(LanguageChoice.Fixed(Language.EN), s.choice)
         s.accountClosed(alice)
         assertEquals(Language.ZH, s.current.value)
-        // Kept on this device for the account until the server says otherwise.
-        s.accountOpened(alice)
-        assertEquals(Language.EN, s.current.value)
-        // An account with no choice: this device's choice.
-        s.accountClosed(alice)
-        s.accountOpened(bob)
+        // No language on the account (""): this device's choice.
+        s.accountOpened(bob, serverLanguage = "")
+        assertEquals(Language.ZH, s.current.value)
+        // A tag this app does not speak counts as none.
+        s.accountClosed(bob)
+        s.accountOpened(bob, serverLanguage = "fr")
         assertEquals(Language.ZH, s.current.value)
     }
 
     @Test
     fun choosingWhileSignedInSetsTheAccountToo() {
-        val sent = mutableListOf<Pair<String, LanguageChoice>>()
+        val sent = mutableListOf<String>()
         val s = LanguageSettings(prefs, listOf("zh-CN"))
-        s.onAccountChoice = { key, choice -> sent += key to choice }
-        s.accountOpened(alice)
+        s.onAccountChoice = { key, tag -> sent += "$key=$tag" }
+        s.accountOpened(alice, serverLanguage = "")
         s.choose(LanguageChoice.Fixed(Language.EN))
-        assertEquals(listOf<Pair<String, LanguageChoice>>(alice to LanguageChoice.Fixed(Language.EN)), sent)
+        assertEquals(listOf("$alice=en"), sent)
         assertEquals(Language.EN, s.current.value)
+        // Not sent yet (offline): it wins over the server's older value.
+        assertEquals("en", s.pendingTag(alice))
+        s.accountOpened(alice, serverLanguage = "zh")
+        assertEquals(Language.EN, s.current.value)
+        s.pushed(alice, "en")
+        assertNull(s.pendingTag(alice))
+        // Following the system clears the account's language.
+        s.choose(LanguageChoice.System)
+        assertEquals("$alice=", sent.last())
+        assertEquals(Language.ZH, s.current.value)
         s.accountClosed(alice)
-        // The device remembers it as well.
-        assertEquals(Language.EN, s.current.value)
-        assertEquals(LanguageChoice.Fixed(Language.EN), s.deviceChoice)
+        assertEquals(LanguageChoice.System, s.deviceChoice)
     }
 
     @Test
-    fun aNewAccountStartsWithTheLanguageInUse() {
-        val s = LanguageSettings(prefs, listOf("en-US"))
-        assertEquals(Language.EN, s.registered(alice))
-        // The system changes later; the account keeps its language.
-        s.systemChanged(listOf("zh-CN"))
-        s.accountOpened(alice)
-        assertEquals(Language.EN, s.current.value)
-        assertEquals(LanguageChoice.Fixed(Language.EN), s.choice)
+    fun aPushedChangeDoesNotClearANewerOne() {
+        val s = LanguageSettings(prefs, listOf("zh-CN"))
+        s.accountOpened(alice, serverLanguage = "")
+        s.choose(LanguageChoice.Fixed(Language.EN))
+        s.choose(LanguageChoice.Fixed(Language.ZH))
+        s.pushed(alice, "en")
+        assertEquals("zh", s.pendingTag(alice))
     }
 
     @Test

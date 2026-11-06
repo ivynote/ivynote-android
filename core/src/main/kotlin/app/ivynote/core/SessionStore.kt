@@ -83,6 +83,32 @@ class SessionStore(
         _state.value = State.SignedIn(account)
     }
 
+    /**
+     * Saves the account's interface language on the server (`PATCH /me`).
+     * False when it could not be sent (offline): the caller tries again later.
+     */
+    suspend fun pushLanguage(tag: String): Boolean {
+        val current = account ?: return false
+        val api = api ?: return false
+        return try {
+            val user = api.setLanguage(tag)
+            if (account?.token == current.token) {
+                val updated = current.copy(user = user)
+                runCatching { store.save(updated) }
+                _state.value = State.SignedIn(updated)
+            }
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: ApiError) {
+            if (e.endsSession) expire(e)
+            // A refused tag will not succeed later either.
+            !e.isTransient
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     /** Revokes this device's token (best effort) and forgets the account. */
     suspend fun signOut() {
         api?.let { runCatching { it.logout() } }

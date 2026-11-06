@@ -67,21 +67,18 @@ object L10n {
 }
 
 /**
- * Which language the interface speaks, in this order:
+ * Which language the interface speaks, in this order (guide §界面语言):
  *
- * 1. the signed-in account's choice, when a synced library is open
- *    (kept by the server, so it follows the user to every device);
- * 2. the choice made on this device, remembered across launches;
- * 3. the system's language (the first supported one in its list).
+ * 1. the signed-in account's language (`User.language`, kept by the server,
+ *    the same on every device), when a synced library is open and it is set;
+ * 2. the choice made on this device, remembered across launches and sign-outs;
+ * 3. the system's language (the first supported one in its list, else English).
  *
  * Choosing in settings sets this device's choice and, when an account is
- * open, the account's. A newly registered account starts with the language
- * in use at that moment.
- *
- * Until the server stores the language (pending in ivynote), the account's
- * choice is kept on this device per account; [onAccountChoice] is where it
- * will be sent, and [accountOpened] takes the server's value once `/me`
- * carries it.
+ * open, the account's (`PATCH /me {language}`; "follow the system" clears
+ * it). A change made offline is kept as pending and sent once the server can
+ * be reached ([pendingTag], [pushed]). A new account is registered with the
+ * language in use at that moment.
  */
 class LanguageSettings(
     private val prefs: KeyValueStore,
@@ -89,12 +86,12 @@ class LanguageSettings(
 ) {
     private var systemTags: List<String> = systemTags
 
-    /** The open account: its key and its choice, if any. */
+    /** The open account: its key and its language, if it has one. */
     private var account: String? = null
-    private var accountChoice: LanguageChoice? = null
+    private var accountLanguage: Language? = null
 
-    /** Called when the user changes an account's language: send it to the server. */
-    var onAccountChoice: ((accountKey: String, choice: LanguageChoice) -> Unit)? = null
+    /** Called when the user changes the open account's language: send [tag] to the server. */
+    var onAccountChoice: ((accountKey: String, tag: String) -> Unit)? = null
 
     private val _current = MutableStateFlow(resolve())
     /** The language in use. */
@@ -110,7 +107,7 @@ class LanguageSettings(
 
     /** What the settings page shows as selected. */
     val choice: LanguageChoice
-        get() = accountChoice ?: deviceChoice
+        get() = accountLanguage?.let(LanguageChoice::Fixed) ?: deviceChoice
 
     private val _selected = MutableStateFlow(choice)
     /** [choice], observable. */
@@ -132,22 +129,24 @@ class LanguageSettings(
     fun choose(choice: LanguageChoice) {
         if (choice == LanguageChoice.System) prefs.remove(DEVICE_KEY) else prefs.putString(DEVICE_KEY, choice.tag)
         account?.let { key ->
-            accountChoice = choice
-            prefs.putString(ACCOUNT_KEY_PREFIX + key, choice.tag)
-            onAccountChoice?.invoke(key, choice)
+            // "Follow the system" clears the account's language.
+            val tag = (choice as? LanguageChoice.Fixed)?.language?.tag ?: ""
+            accountLanguage = (choice as? LanguageChoice.Fixed)?.language
+            prefs.putString(PENDING_KEY_PREFIX + key, tag)
+            onAccountChoice?.invoke(key, tag)
         }
         update()
     }
 
     /**
-     * A synced library opened with a signed-in account. [serverChoice] is
-     * the account's language as the server has it, once it does; until then
-     * the choice kept on this device for this account applies, if any.
+     * A synced library is open with a signed-in account, or its account was
+     * refreshed. [serverLanguage] is `User.language` ("" when not set). A
+     * change not sent yet wins over it.
      */
-    fun accountOpened(accountKey: String, serverChoice: LanguageChoice? = null) {
+    fun accountOpened(accountKey: String, serverLanguage: String) {
         account = accountKey
-        if (serverChoice != null) prefs.putString(ACCOUNT_KEY_PREFIX + accountKey, serverChoice.tag)
-        accountChoice = serverChoice ?: LanguageChoice.fromTag(prefs.getString(ACCOUNT_KEY_PREFIX + accountKey))
+        val tag = pendingTag(accountKey) ?: serverLanguage
+        accountLanguage = Language.fromTag(tag)
         update()
     }
 
@@ -155,22 +154,19 @@ class LanguageSettings(
     fun accountClosed(accountKey: String) {
         if (account != accountKey) return
         account = null
-        accountChoice = null
+        accountLanguage = null
         update()
     }
 
-    /**
-     * A new account was registered: it starts with the language in use now,
-     * as a fixed choice. Returns it, for the registration request.
-     */
-    fun registered(accountKey: String): Language {
-        val language = _current.value
-        prefs.putString(ACCOUNT_KEY_PREFIX + accountKey, language.tag)
-        if (account == accountKey) accountChoice = LanguageChoice.Fixed(language)
-        return language
+    /** A language change for the account not yet saved on the server ("" clears it), if any. */
+    fun pendingTag(accountKey: String): String? = prefs.getString(PENDING_KEY_PREFIX + accountKey)
+
+    /** The server took [tag]; a newer pending change stays. */
+    fun pushed(accountKey: String, tag: String) {
+        if (pendingTag(accountKey) == tag) prefs.remove(PENDING_KEY_PREFIX + accountKey)
     }
 
-    private fun resolve(): Language = when (val c = accountChoice ?: deviceChoice) {
+    private fun resolve(): Language = accountLanguage ?: when (val c = deviceChoice) {
         LanguageChoice.System -> Language.fromSystem(systemTags)
         is LanguageChoice.Fixed -> c.language
     }
@@ -184,7 +180,7 @@ class LanguageSettings(
 
     companion object {
         const val DEVICE_KEY = "ivy.language"
-        const val ACCOUNT_KEY_PREFIX = "ivy.language.account."
+        const val PENDING_KEY_PREFIX = "ivy.language.pending."
 
         /** An account across devices: its server and user id. */
         fun accountKey(server: ServerAddress, userId: String): String = "${server.base}|$userId"

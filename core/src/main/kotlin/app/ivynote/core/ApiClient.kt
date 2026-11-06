@@ -44,12 +44,14 @@ class ApiClient(
         return r.token to r.user
     }
 
-    suspend fun register(username: String, password: String, email: String = "", displayName: String = ""): Pair<String, User> {
+    /** [language]: the interface language at sign-up; it becomes the account's. */
+    suspend fun register(username: String, password: String, email: String = "", displayName: String = "", language: String = L10n.language.tag): Pair<String, User> {
         val body = buildJsonObject {
             put("username", username)
             put("password", password)
             if (email.isNotEmpty()) put("email", email)
             if (displayName.isNotEmpty()) put("displayName", displayName)
+            if (language.isNotEmpty()) put("language", language)
         }
         val r: AuthResponse = send("POST", "auth/register", body, AuthResponse.serializer())
         return r.token to r.user
@@ -61,6 +63,10 @@ class ApiClient(
     }
 
     suspend fun me(): User = get("me")
+
+    /** Sets the account's interface language; "" clears it (follow the device). */
+    suspend fun setLanguage(language: String): User =
+        send("PATCH", "me", buildJsonObject { put("language", language) }, User.serializer())
 
     // Sync (guide 5.4)
 

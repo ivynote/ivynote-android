@@ -71,7 +71,6 @@ import app.ivynote.android.platform.SqliteDocumentStore
 import app.ivynote.core.ApiClient
 import app.ivynote.core.ApiError
 import app.ivynote.core.L10n
-import app.ivynote.core.LanguageSettings
 import app.ivynote.core.LibraryMigrator
 import app.ivynote.core.LibraryRef
 import app.ivynote.core.OfficialRegions
@@ -228,8 +227,6 @@ fun CloudSignInScreen(promoting: LibraryRef?, onBack: () -> Unit) {
                     api.login(identity.trim(), password)
                 }
                 password = ""
-                // A new account starts with the language in use now.
-                if (registering) app.language.registered(LanguageSettings.accountKey(target, user.id))
                 if (promoting != null) {
                     newAccount = Triple(target, token, user)
                     migrate(promoting)
@@ -493,7 +490,6 @@ fun SignInScreen(ref: LibraryRef, session: SessionStore) {
                 val api = session.client(server)
                 val (token, user) = if (mode == Mode.LOGIN) api.login(identity.trim(), password)
                 else api.register(username.trim(), password, email.trim(), displayName.trim())
-                if (mode == Mode.REGISTER) IvyApp.instance.language.registered(LanguageSettings.accountKey(server, user.id))
                 session.signIn(server, token, user)
                 password = ""
             } catch (e: CancellationException) {

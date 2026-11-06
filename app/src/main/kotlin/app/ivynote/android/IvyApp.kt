@@ -53,9 +53,6 @@ class IvyApp : Application() {
         prefs = SharedPrefsStore(this)
         systemLocale = systemLocales(resources.configuration).firstOrNull() ?: Locale.getDefault()
         language = LanguageSettings(prefs, systemLocales(resources.configuration).map { it.toLanguageTag() })
-        // TODO(server): once ivynote stores the account's language, send the
-        // choice here (PATCH /me) and pass `/me`'s value to accountOpened.
-        language.onAccountChoice = null
         applyLocale(language.current.value)
         appScope.launch { language.current.collect { applyLocale(it) } }
         // Official node addresses: the website's last answer, else the built-in ones.
