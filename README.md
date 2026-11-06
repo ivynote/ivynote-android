@@ -42,6 +42,32 @@ repository does not keep a copy.
   outline sheet, following a missing `[[link]]` creates the note. Images and
   other attachments load with the account's token and stay cached for offline
   reading; videos seek with byte ranges.
+- **Attachments** (guide 7): photos, camera and files from the format bar,
+  embedded at the cursor (`![name](ivy://res/<id>)`, a file card for other
+  files). Uploaded at once; offline they wait under a `local-` id, show from
+  the device, and are uploaded and rewritten in every note before the next
+  push. A refused file (too large) is reported and does not hold back sync.
+  A local library keeps its files on the device (de-duplicated by SHA-256)
+  and uploads them when it turns on sync.
+- **Media library**: filters (all, images, video, audio, files, unreferenced,
+  trash), file name search, a thumbnail grid, and details: preview, the notes
+  that reference the file, rename, public link (make, copy, revoke),
+  share or save the original, trash, restore, delete forever. Offline it
+  shows the synced metadata.
+- **Tags**: a note's tags under its title; a picker to search, create
+  (「创建 xxx」) and toggle them (at most 50 per note); rename, recolor and
+  delete from the picker or the shelf.
+- **Backlinks**, computed locally (guide 9.2: no self links, no trash, not
+  from code; a title shared by several notes points at the newest), with the
+  line around each link.
+- **History**: the server's saved versions with device and size; preview the
+  source; restore writes it back as a normal edit, so it syncs and the
+  replaced text stays in the history.
+- **Sharing**: a public link with the required password (generated or typed,
+  at least 6), expiry (1, 7, 30 days, never) and views; copy link and
+  password together. Copy Markdown, send to another app or export `.md`;
+  online the export publishes attachments and uses their public addresses,
+  offline it is the local text.
 - **Search** across titles and bodies, ranked as on the web (guide 11.5).
 - Phones show one pane at a time; tablets and unfolded foldables show the
   shelf beside the note. Light and dark themes follow the system.
@@ -151,6 +177,7 @@ Locally, a git-ignored `keystore.properties` (`storeFile`, `storePassword`,
 
 1. ~~Connect, sign in, sign up, session restore, libraries~~
 2. ~~Local store (SQLite) and sync engine: HLC, outbox, push/pull, SSE~~
-3. ~~Shelf, editor with live preview, outline, search~~; next: tags editing
-4. Attachment upload (camera, files) with the offline upload queue (guide 7.1–7.2)
-5. Backlinks, history, sharing, media library, settings (as the Apple client gains them)
+3. ~~Shelf, editor with live preview, outline, search, tags editing~~
+4. ~~Attachment upload (camera, files) with the offline upload queue (guide 7.1–7.2)~~
+5. ~~Backlinks, history, sharing, media library~~; next: rendered history
+   preview, copy as rich text, share management and settings

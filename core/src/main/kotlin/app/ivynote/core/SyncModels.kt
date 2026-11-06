@@ -139,15 +139,59 @@ data class Attachment(
     val id: String,
     val name: String = "",
     val mime: String = "",
+    /** image / video / audio / file. */
     val kind: String = "file",
+    /** Plain bytes. */
     val size: Long = 0,
     val width: Int? = null,
     val height: Int? = null,
+    /** Plain SHA-256, hex. */
+    val sha256: String = "",
+    /** local | s3 on a server; "device" for a local library's own files. */
+    val storage: String = "",
     val hasThumb: Boolean = false,
+    /** How many notes reference it (server-computed; local libraries count themselves). */
+    val refs: Int = 0,
+    val orphanSince: Millis = 0,
+    val trashedAt: Millis = 0,
+    /** manual | orphan. */
+    val trashReason: String = "",
+    val public: Boolean = false,
+    /** Only for CDN copies. */
+    val publicUrl: String = "",
     val seq: Long = 0,
     val deleted: Boolean = false,
     val createdAt: Millis = 0,
     val updatedAt: Millis = 0,
+) {
+    val isTrashed: Boolean get() = trashedAt > 0
+
+    companion object {
+        /** Guide 4.1: the kind follows the MIME type. */
+        fun kindOf(mime: String): String = when {
+            mime.startsWith("image/") -> "image"
+            mime.startsWith("video/") -> "video"
+            mime.startsWith("audio/") -> "audio"
+            else -> "file"
+        }
+    }
+}
+
+/**
+ * A file added while the server could not be reached (guide 7.2): kept on the
+ * device under a `local-` id until [SyncEngine.flushUploads] uploads it and
+ * rewrites the notes that reference it.
+ */
+@Serializable
+data class PendingUpload(
+    /** `local-<id>`. */
+    val id: String,
+    val name: String,
+    val mime: String,
+    val size: Long = 0,
+    val createdAt: Millis = 0,
+    /** Why the server refused it; not retried until the app restarts. */
+    val failed: String? = null,
 )
 
 // Wire format (guide 6.3, 6.5)

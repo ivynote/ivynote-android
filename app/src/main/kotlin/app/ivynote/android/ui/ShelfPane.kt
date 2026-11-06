@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Search
@@ -114,6 +115,7 @@ fun ShelfPane(ui: LibraryUiState, session: SessionStore?, wide: Boolean, modifie
     var renamingNote by remember { mutableStateOf<Note?>(null) }
     var movingNote by remember { mutableStateOf<Note?>(null) }
     var confirmEmpty by remember { mutableStateOf(false) }
+    var editingTag by remember { mutableStateOf<app.ivynote.core.Tag?>(null) }
 
     val rows = remember(revision, ui.expanded, sortBy, limits.toMap()) {
         Shelf.build(engine.folders.values, engine.notes.values, engine.tags.values, ui.expanded, sortBy, limits)
@@ -126,6 +128,7 @@ fun ShelfPane(ui: LibraryUiState, session: SessionStore?, wide: Boolean, modifie
         renameNote = { renamingNote = it },
         moveNote = { movingNote = it },
         emptyTrash = { confirmEmpty = true },
+        editTag = { editingTag = it },
     )
 
     Box(modifier) {
@@ -195,6 +198,7 @@ fun ShelfPane(ui: LibraryUiState, session: SessionStore?, wide: Boolean, modifie
     movingNote?.let { n ->
         MoveDialog(engine, n, onDismiss = { movingNote = null })
     }
+    editingTag?.let { t -> TagEditDialog(engine, t, onDismiss = { editingTag = null }) }
     if (confirmEmpty) {
         ConfirmDialog("清空回收站？", "回收站中的全部笔记将被永久删除，此操作无法撤销。", "清空回收站", onDismiss = { confirmEmpty = false }) {
             if (ui.selectedNote?.let { engine.notes[it]?.isTrashed } == true) ui.selection = null
@@ -214,6 +218,7 @@ class ShelfActions(
     val renameNote: (Note) -> Unit,
     val moveNote: (Note) -> Unit,
     val emptyTrash: () -> Unit,
+    val editTag: (app.ivynote.core.Tag) -> Unit = {},
 )
 
 // Header
@@ -261,6 +266,8 @@ private fun LibraryHeader(ui: LibraryUiState, session: SessionStore?, state: app
                 DropdownMenuItem(text = { Text("开启多端同步…") }, leadingIcon = { Icon(Icons.Outlined.CloudUpload, null) },
                     onClick = { open = false; catalog.turnOnSync(ref.id) })
             }
+            DropdownMenuItem(text = { Text("媒体库") }, leadingIcon = { Icon(Icons.Outlined.PhotoLibrary, null) },
+                onClick = { open = false; ui.showMedia = true })
             DropdownMenuItem(text = { Text("管理笔记库…") }, leadingIcon = { Icon(Icons.Outlined.Book, null) },
                 onClick = { open = false; catalog.open(null) })
         }
@@ -322,7 +329,7 @@ private fun ShelfRow(
             Shelf.Kind.HEADING -> menu = true
         }
     }
-    val hasMenu = row.kind in setOf(Shelf.Kind.FOLDER, Shelf.Kind.NOTE, Shelf.Kind.HEADING) ||
+    val hasMenu = row.kind in setOf(Shelf.Kind.FOLDER, Shelf.Kind.NOTE, Shelf.Kind.HEADING, Shelf.Kind.TAG) ||
         (row.key == Shelf.TRASH_KEY && row.count > 0)
     Box(Modifier.padding(top = if (row.gap) 14.dp else 0.dp)) {
         Box(
@@ -369,7 +376,12 @@ private fun RowContent(row: Shelf.Row, engine: SyncEngine, onHeadingMenu: () -> 
             Box(Modifier.width(20.dp), contentAlignment = Alignment.Center) {
                 if (row.expandable) Chevron(row.open)
             }
-            Icon(rowIcon(row), contentDescription = null, tint = if (row.kind == Shelf.Kind.NOTE) c.muted else c.ivy, modifier = Modifier.size(20.dp))
+            val tint = when {
+                row.kind == Shelf.Kind.NOTE -> c.muted
+                row.kind == Shelf.Kind.TAG && row.tag?.color.orEmpty().isNotEmpty() -> tagColor(row.tag!!.color)
+                else -> c.ivy
+            }
+            Icon(rowIcon(row), contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             val untitled = row.kind == Shelf.Kind.NOTE && row.label.isBlank()
             Text(
@@ -461,6 +473,9 @@ private fun RowMenu(
             item("删除", Icons.Outlined.Delete, danger = true) { actions.deleteFolder(f) }()
         }
         Shelf.Kind.NOTE -> row.note?.let { n -> NoteMenuItems(n, ui, engine, actions, close) }
+        Shelf.Kind.TAG -> row.tag?.let { t ->
+            item("编辑标签…", Icons.Outlined.Edit) { actions.editTag(t) }()
+        }
         Shelf.Kind.GROUP -> if (row.key == Shelf.TRASH_KEY) {
             item("清空回收站", Icons.Outlined.DeleteForever, danger = true) { actions.emptyTrash() }()
         }

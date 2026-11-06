@@ -3,6 +3,7 @@ package app.ivynote.core
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -11,9 +12,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
+import java.io.File
+import java.security.MessageDigest
 
 /** Where the engine stands, for the status line (guide 3.5). */
 data class SyncState(
@@ -32,6 +36,14 @@ data class SyncState(
 
 /** The server kept a pushed body as a separate note. */
 data class ConflictNotice(val noteId: String, val copyId: String)
+
+/** A queued file the server refused (too large, a type it does not take). */
+data class UploadFailure(val name: String, val message: String)
+
+/** What [SyncEngine.addFile] put in the library: the id to reference and how to embed it. */
+data class AddedFile(val id: String, val name: String, val kind: String, val queued: Boolean, val duplicate: Boolean = false) {
+    val markdown: String get() = Links.embed(id, name, kind)
+}
 
 /**
  * Local-first sync engine: a port of the web client's
@@ -57,6 +69,12 @@ class SyncEngine(
     private val debounceMs: Long = 800,
     private val persistDelayMs: Long = 300,
     private val now: () -> Millis = ::nowMillis,
+    /**
+     * Files that live on this device: uploads waiting for the network
+     * (`local-` ids, guide 7.2) and, in a local library, every attachment.
+     * Null: the library cannot take files.
+     */
+    val files: File? = null,
 ) {
     private val _notes = HashMap<String, Note>()
     private val _folders = HashMap<String, Folder>()
@@ -66,6 +84,21 @@ class SyncEngine(
     val folders: Map<String, Folder> get() = _folders
     val tags: Map<String, Tag> get() = _tags
     val attachments: Map<String, Attachment> get() = _attachments
+    private val _uploads = LinkedHashMap<String, PendingUpload>()
+    /** Files added offline, waiting for the next sync. */
+    val uploads: Map<String, PendingUpload> get() = _uploads
+
+    /** Set when a queued file was refused; cleared by the UI. */
+    private val _uploadFailure = MutableStateFlow<UploadFailure?>(null)
+    val uploadFailure: StateFlow<UploadFailure?> = _uploadFailure.asStateFlow()
+    fun clearUploadFailure() { _uploadFailure.value = null }
+
+    /**
+     * Called with each file the server took and the local copy it was sent
+     * from, before that copy is deleted: the app keeps it in its attachment
+     * cache, so the file shows offline without a download.
+     */
+    var onUploaded: ((Attachment, File) -> Unit)? = null
 
     private val _state = MutableStateFlow(SyncState())
     val state: StateFlow<SyncState> = _state.asStateFlow()
@@ -119,6 +152,8 @@ class SyncEngine(
         for (doc in store.all(Table.FOLDERS)) decode(doc, Folder.serializer())?.let { _folders[it.id] = it }
         for (doc in store.all(Table.TAGS)) decode(doc, Tag.serializer())?.let { _tags[it.id] = it }
         for (doc in store.all(Table.ATTACHMENTS)) decode(doc, Attachment.serializer())?.let { _attachments[it.id] = it }
+        // A restart is a new attempt for refused files too (guide 7.2).
+        for (doc in store.all(Table.UPLOADS)) decode(doc, PendingUpload.serializer())?.let { _uploads[it.id] = it.copy(failed = null) }
         for (doc in store.all(Table.OUTBOX)) {
             // A restart is a new attempt: the clock or the server may have changed.
             decode(doc, OutboxEntry.serializer())?.let { outbox[it.key] = it.copy(blocked = null) }
@@ -162,6 +197,7 @@ class SyncEngine(
         syncTimer = null
         _state.update { it.copy(status = SyncState.Status.SYNCING, initial = it.lastSyncAt == 0L) }
         try {
+            flushUploads()
             push()
             pull()
             retryDelayMs = 2_000
@@ -439,8 +475,8 @@ class SyncEngine(
     }
 
     private fun updateCounts() {
-        val blocked = outbox.values.count { it.blocked != null }
-        _state.update { it.copy(blocked = blocked, pending = outbox.size - blocked) }
+        val blocked = outbox.values.count { it.blocked != null } + _uploads.values.count { it.failed != null }
+        _state.update { it.copy(blocked = blocked, pending = outbox.size + _uploads.size - blocked) }
     }
 
     private fun changed() {
@@ -622,13 +658,46 @@ class SyncEngine(
 
     fun createTag(name: String, color: String = ""): Tag {
         val t = now()
-        val clean = name.trim().trimStart('#').trim().take(50)
+        val clean = cleanTagName(name)
         val tag = Tag(id = newEntityId(), name = clean, color = color, createdAt = t, updatedAt = t)
         _tags[tag.id] = tag
         dirty.tags += tag.id
         enqueue(EntityType.TAG, tag.id, mapOf("name" to JsonPrimitive(clean), "color" to JsonPrimitive(color)))
         changed()
         return tag
+    }
+
+    /** Renames or recolors a tag; [name] is cleaned as on the server (no `#`, at most 50). */
+    fun updateTag(id: String, name: String? = null, color: String? = null) {
+        var t = _tags[id] ?: return
+        val fields = linkedMapOf<String, JsonElement>()
+        name?.let { cleanTagName(it) }?.takeIf { it.isNotEmpty() && it != t.name }?.let { t = t.copy(name = it); fields["name"] = JsonPrimitive(it) }
+        color?.takeIf { it != t.color }?.let { t = t.copy(color = it); fields["color"] = JsonPrimitive(it) }
+        if (fields.isEmpty()) return
+        _tags[id] = t.copy(updatedAt = now())
+        dirty.tags += id
+        enqueue(EntityType.TAG, id, fields)
+        changed()
+    }
+
+    /** The tag of that name (case and spacing ignored), if there is one. */
+    fun tagNamed(name: String): Tag? {
+        val key = Links.normalizeTitle(cleanTagName(name))
+        if (key.isEmpty()) return null
+        return _tags.values.filter { !it.deleted && Links.normalizeTitle(it.name) == key }.minByOrNull { it.createdAt }
+    }
+
+    /** Adds or removes one tag on a note (at most [MAX_NOTE_TAGS], guide 4.3). */
+    fun setNoteTag(noteId: String, tagId: String, on: Boolean) {
+        val n = _notes[noteId] ?: return
+        val tags = if (on) {
+            if (tagId in n.tags || n.tags.size >= MAX_NOTE_TAGS) return
+            n.tags + tagId
+        } else {
+            if (tagId !in n.tags) return
+            n.tags - tagId
+        }
+        updateNote(noteId, NotePatch(tags = tags))
     }
 
     fun deleteTag(id: String) {
@@ -644,12 +713,171 @@ class SyncEngine(
         changed()
     }
 
+    // Attachments (guide 7)
+
+    /**
+     * Adds a file: uploaded now; queued under a `local-` id when the server
+     * cannot be reached (only then, guide 7.1); in a local library kept on
+     * this device. Other server errors are thrown. [source] is not kept, so
+     * it may be a temporary file.
+     */
+    suspend fun addFile(source: File, name: String, mime: String): AddedFile {
+        val dir = files ?: throw IllegalStateException("this library cannot take files")
+        val type = mime.ifEmpty { "application/octet-stream" }
+        val kind = Attachment.kindOf(type)
+        val transport = transport
+        if (transport == null) return addLocalFile(dir, source, name, type)
+        try {
+            val res = transport.upload(source, name, type)
+            putAttachment(res.attachment)
+            onUploaded?.invoke(res.attachment, source)
+            return AddedFile(res.attachment.id, res.attachment.name.ifEmpty { name }, res.attachment.kind, queued = false, duplicate = res.duplicate)
+        } catch (e: ApiError.Unreachable) {
+            val id = "local-" + newEntityId()
+            val size = withContext(Dispatchers.IO) {
+                dir.mkdirs()
+                source.copyTo(File(dir, id), overwrite = true).length()
+            }
+            val up = PendingUpload(id = id, name = name, mime = type, size = size, createdAt = now())
+            _uploads[id] = up
+            store.write(StoreBatch().apply { put(Table.UPLOADS, id, IvyJson.encodeToString(PendingUpload.serializer(), up)) })
+            _state.update { it.copy(status = SyncState.Status.OFFLINE) }
+            updateCounts()
+            changed()
+            scheduleSync(retryDelayMs)
+            return AddedFile(id, name, kind, queued = true)
+        }
+    }
+
+    /** A local library's file: copied in under a new id, or the same file already there. */
+    private suspend fun addLocalFile(dir: File, source: File, name: String, mime: String): AddedFile {
+        val id = newEntityId()
+        val target = File(dir, id)
+        val (hash, size) = withContext(Dispatchers.IO) {
+            dir.mkdirs()
+            source.copyTo(target, overwrite = true)
+            sha256(target) to target.length()
+        }
+        _attachments.values.firstOrNull { it.sha256 == hash && !it.deleted }?.let { same ->
+            withContext(Dispatchers.IO) { target.delete() }
+            if (same.isTrashed) putAttachment(same.copy(trashedAt = 0, trashReason = "", updatedAt = now()))
+            return AddedFile(same.id, same.name, same.kind, queued = false, duplicate = true)
+        }
+        val t = now()
+        val a = Attachment(id = id, name = name, mime = mime, kind = Attachment.kindOf(mime), size = size, sha256 = hash,
+            storage = "device", createdAt = t, updatedAt = t)
+        putAttachment(a)
+        return AddedFile(id, name, a.kind, queued = false)
+    }
+
+    /** Uploads queued files and rewrites their `local-` ids in note bodies (guide 7.2). */
+    suspend fun flushUploads() {
+        val transport = transport ?: return
+        val dir = files ?: return
+        for (up in _uploads.values.toList()) {
+            if (up.failed != null) continue
+            val file = File(dir, up.id)
+            if (!file.exists()) {
+                // Lost (storage cleared): nothing to send, drop the entry.
+                dropUpload(up.id)
+                continue
+            }
+            val res = try {
+                transport.upload(file, up.name, up.mime)
+            } catch (e: ApiError.Server) {
+                if (!refused(e.code)) throw e
+                // One bad file must not hold back everything else.
+                val msg = if (e.code == 413) "文件超过服务器的上传上限" else e.message ?: "rejected"
+                _uploads[up.id] = up.copy(failed = msg)
+                _uploadFailure.value = UploadFailure(up.name, msg)
+                updateCounts()
+                continue
+            }
+            val att = res.attachment
+            putAttachment(att)
+            val ids = mapOf(up.id to att.id)
+            for (n in _notes.values.toList()) {
+                if (n.body.contains(up.id)) updateNote(n.id, NotePatch(body = Links.rewriteResources(n.body, ids)))
+            }
+            onUploaded?.invoke(att, file)
+            dropUpload(up.id)
+        }
+    }
+
+    private suspend fun dropUpload(id: String) {
+        _uploads.remove(id)
+        store.write(StoreBatch().apply { delete(Table.UPLOADS, id) })
+        files?.let { dir -> withContext(Dispatchers.IO) { File(dir, id).delete() } }
+        updateCounts()
+        changed()
+    }
+
+    /** The file on this device for [id]: a queued upload or a local library's attachment. */
+    fun localFile(id: String): File? {
+        val dir = files ?: return null
+        if (!id.startsWith("local-") && !isLocal) return null
+        return File(dir, id).takeIf { it.exists() }
+    }
+
+    /** image / video / audio / file, for embeds; null when unknown. */
+    fun attachmentKind(id: String): String? =
+        _uploads[id]?.let { Attachment.kindOf(it.mime) } ?: _attachments[id]?.kind
+
+    /** The MIME type of an attachment or queued file. */
+    fun attachmentMime(id: String): String? = _uploads[id]?.mime ?: _attachments[id]?.mime
+
+    /** Records an attachment's metadata (server answers; a local library's own files). */
+    fun putAttachment(a: Attachment) {
+        _attachments[a.id] = a
+        store.write(StoreBatch().apply { put(Table.ATTACHMENTS, a.id, IvyJson.encodeToString(Attachment.serializer(), a)) })
+        changed()
+    }
+
+    /** Forgets an attachment; in a local library its file goes too. */
+    fun removeAttachment(id: String) {
+        _attachments.remove(id) ?: return
+        store.write(StoreBatch().apply { delete(Table.ATTACHMENTS, id) })
+        if (isLocal) files?.let { File(it, id).delete() }
+        changed()
+    }
+
+    /** Which notes reference each attachment, from the local bodies (trashed notes count, as on the server). */
+    fun attachmentRefs(): Map<String, List<String>> {
+        val refs = HashMap<String, MutableList<String>>()
+        for (n in _notes.values) {
+            if (n.deleted || !n.body.contains("ivy://res/")) continue
+            for (id in Links.resourceRefs(n.body)) refs.getOrPut(id) { mutableListOf() }.add(n.id)
+        }
+        return refs
+    }
+
     private fun <T> decode(doc: String, s: kotlinx.serialization.KSerializer<T>): T? =
         // A row this build cannot read is skipped, not fatal: the next
         // snapshot or pull brings the entity back.
         try { IvyJson.decodeFromString(s, doc) } catch (_: Exception) { null }
 
     companion object {
+        const val MAX_NOTE_TAGS = 50
+
+        /** As the server stores tag names: no leading `#`, trimmed, at most 50 characters. */
+        fun cleanTagName(name: String): String = name.trim().trimStart('#').trim().replace('\n', ' ').take(50)
+
+        /** Guide 7.2: other 4xx refuse this one file; network, 5xx, 401, 408 and 429 stop the round. */
+        internal fun refused(code: Int): Boolean = code in 400..499 && code !in setOf(401, 408, 429)
+
+        fun sha256(file: File): String {
+            val md = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buf = ByteArray(64 shl 10)
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    md.update(buf, 0, n)
+                }
+            }
+            return md.digest().joinToString("") { "%02x".format(it) }
+        }
+
         internal fun utf8Length(s: String): Int {
             var n = 0
             var i = 0

@@ -3,7 +3,7 @@
 // Kept in step with the Apple client's EditorWeb/main.ts.
 //
 // Kotlin → JS: window.ivy.load / setBody / setTitles / setKinds / setTheme /
-//              setReadonly / focus / command / scrollToLine
+//              setReadonly / focus / command / scrollToLine / insert
 // JS → Kotlin: IvyAndroid.postMessage(JSON.stringify({ type, ... }))
 //   ready              the page can take a document
 //   change {id, body}  the user edited the note
@@ -203,7 +203,16 @@ window.ivy = {
 	},
 
 	setKinds(map: Record<string, string>) {
+		const changed = JSON.stringify(map) !== JSON.stringify(kinds);
 		kinds = map;
+		// Embeds drawn before their kind was known re-render as video, audio or a file card.
+		if (changed) view?.dispatch({});
+	},
+
+	/** Inserts text at the cursor (an attachment embed: on its own line). */
+	insert(text: string, block = true) {
+		if (!view || view.state.readOnly) return;
+		insertText(view, text, block);
 	},
 
 	setTheme(dark: boolean) {

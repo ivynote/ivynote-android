@@ -49,6 +49,7 @@ class LibraryUiState(val lib: LibrarySession) {
     var selection by mutableStateOf<String?>(null)
     var expanded by mutableStateOf(IvyApp.instance.catalog.expanded(lib.ref.id))
     var showAccount by mutableStateOf(false)
+    var showMedia by mutableStateOf(false)
 
     val selectedNote: String? get() = selection?.let(Shelf::noteId)
 
@@ -149,6 +150,19 @@ fun LibraryScreen(lib: LibrarySession, session: SessionStore?) {
                 }
             }
         }
+    }
+
+    if (ui.showMedia) {
+        MediaScreen(lib, onOpenNote = { id -> ui.showMedia = false; ui.reveal(id) }, onDismiss = { ui.showMedia = false })
+    }
+
+    // A queued file the server refused (guide 7.2): say so; the rest keeps syncing.
+    val refused by engine.uploadFailure.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(refused) {
+        val f = refused ?: return@LaunchedEffect
+        toast(context, "「${f.name}」未能上传：${f.message}", long = true)
+        engine.clearUploadFailure()
     }
 
     if (ui.showAccount && session != null) {

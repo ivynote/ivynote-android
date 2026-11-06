@@ -3,7 +3,7 @@ package app.ivynote.core
 import java.io.File
 
 /** The tables of a library database: each maps an ID to a JSON document. */
-enum class Table { NOTES, FOLDERS, TAGS, ATTACHMENTS, OUTBOX }
+enum class Table { NOTES, FOLDERS, TAGS, ATTACHMENTS, OUTBOX, UPLOADS }
 
 /** Writes applied together, in one transaction. */
 class StoreBatch {

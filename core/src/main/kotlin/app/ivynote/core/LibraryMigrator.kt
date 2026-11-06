@@ -3,6 +3,7 @@ package app.ivynote.core
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
+import java.io.File
 
 /**
  * Turns on sync for a local library: copies it into a newly registered,
@@ -21,22 +22,37 @@ class LibraryMigrator(
     private val device: String,
     private val now: () -> Millis = ::nowMillis,
 ) {
-    data class Content(val folders: List<Folder>, val tags: List<Tag>, val notes: List<Note>) {
+    data class Content(
+        val folders: List<Folder>,
+        val tags: List<Tag>,
+        val notes: List<Note>,
+        val attachments: List<Attachment> = emptyList(),
+        /** Where the local library keeps its files (by attachment id). */
+        val files: File? = null,
+    ) {
         companion object {
             /** Reads a library's database directly; the library should not be open. */
-            fun read(store: DocumentStore): Content = Content(
+            fun read(store: DocumentStore, files: File? = null): Content = Content(
                 folders = store.all(Table.FOLDERS).mapNotNull { runCatching { IvyJson.decodeFromString(Folder.serializer(), it) }.getOrNull() },
                 tags = store.all(Table.TAGS).mapNotNull { runCatching { IvyJson.decodeFromString(Tag.serializer(), it) }.getOrNull() },
                 notes = store.all(Table.NOTES).mapNotNull { runCatching { IvyJson.decodeFromString(Note.serializer(), it) }.getOrNull() },
+                attachments = store.all(Table.ATTACHMENTS).mapNotNull { runCatching { IvyJson.decodeFromString(Attachment.serializer(), it) }.getOrNull() },
+                files = files,
             )
         }
     }
 
     data class Progress(val phase: Phase, val done: Int, val total: Int) {
-        enum class Phase { CHECK, NOTES, DONE }
+        enum class Phase { CHECK, FILES, NOTES, DONE }
     }
 
-    data class Result(val notes: Int = 0, val rejected: List<String> = emptyList())
+    data class Result(
+        val notes: Int = 0,
+        val rejected: List<String> = emptyList(),
+        val files: Int = 0,
+        /** Names of files that could not be read or that the server refused. */
+        val failedFiles: List<String> = emptyList(),
+    )
 
     class AccountNotEmpty : Exception("这个账户里已经有笔记。本地笔记库只能迁移到新注册的空账户。")
 
@@ -44,6 +60,7 @@ class LibraryMigrator(
         val folders = parentsFirst(content.folders.filter { !it.deleted })
         val tags = content.tags.filter { !it.deleted }
         val notes = content.notes.filter { !it.deleted }
+        val files = content.attachments.filter { !it.deleted && !it.isTrashed }
 
         progress(Progress(Progress.Phase.CHECK, 0, 1))
         val existing = api.pull(0)
@@ -53,8 +70,30 @@ class LibraryMigrator(
         val theirs = existing.notes.filter { !it.deleted }.map { it.id } +
             existing.folders.filter { !it.deleted }.map { it.id } +
             existing.tags.filter { !it.deleted }.map { it.id }
-        val strayFiles = existing.attachments.any { !it.deleted }
+        // Files are de-duplicated by content, so an interrupted run left only these.
+        val hashes = files.mapTo(HashSet()) { it.sha256 }
+        val strayFiles = existing.attachments.any { !it.deleted && it.sha256 !in hashes }
         if (strayFiles || theirs.any { it !in ours }) throw AccountNotEmpty()
+
+        // Files first: the server assigns ids, so note bodies are rewritten to them.
+        val ids = HashMap<String, String>()
+        val failedFiles = ArrayList<String>()
+        for ((i, a) in files.withIndex()) {
+            progress(Progress(Progress.Phase.FILES, i, files.size))
+            val file = content.files?.let { File(it, a.id) }
+            if (file == null || !file.exists()) {
+                failedFiles += a.name
+                continue
+            }
+            try {
+                ids[a.id] = api.upload(file, a.name.ifEmpty { "file" }, a.mime).attachment.id
+            } catch (e: ApiError.Server) {
+                // The account was checked above, so only this file is at fault.
+                if (!SyncEngine.refused(e.code)) throw e
+                failedFiles += a.name
+            }
+        }
+        if (files.isNotEmpty()) progress(Progress(Progress.Phase.FILES, files.size, files.size))
 
         val clock = HLC(device)
         val changes = ArrayList<Change>()
@@ -68,7 +107,7 @@ class LibraryMigrator(
                 mapOf("name" to JsonPrimitive(t.name), "color" to JsonPrimitive(t.color)), clock.tick(now()), null, device)
         }
         for (n in notes) {
-            val fields = linkedMapOf<String, JsonElement>("title" to JsonPrimitive(n.title), "body" to JsonPrimitive(n.body), "createdAt" to JsonPrimitive(n.createdAt))
+            val fields = linkedMapOf<String, JsonElement>("title" to JsonPrimitive(n.title), "body" to JsonPrimitive(Links.rewriteResources(n.body, ids)), "createdAt" to JsonPrimitive(n.createdAt))
             if (n.folderId.isNotEmpty()) fields["folderId"] = JsonPrimitive(n.folderId)
             if (n.tags.isNotEmpty()) fields["tags"] = JsonArray(n.tags.map(::JsonPrimitive))
             if (n.pinned) fields["pinned"] = JsonPrimitive(true)
@@ -100,7 +139,7 @@ class LibraryMigrator(
             progress(Progress(Progress.Phase.NOTES, notesSent, notes.size))
         }
         progress(Progress(Progress.Phase.DONE, notes.size, notes.size))
-        return Result(accepted, rejected)
+        return Result(accepted, rejected, ids.size, failedFiles)
     }
 
     companion object {
