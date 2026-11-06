@@ -172,7 +172,7 @@ fun ShelfPane(ui: LibraryUiState, session: SessionStore?, wide: Boolean, modifie
             val n = name.trim().take(100)
             if (n.isNotEmpty()) {
                 engine.createFolder(n, parent)
-                if (parent.isNotEmpty()) ui.setExpanded(ui.expanded + parent)
+                if (parent.isNotEmpty()) ui.updateExpanded(ui.expanded + parent)
             }
         }
     }

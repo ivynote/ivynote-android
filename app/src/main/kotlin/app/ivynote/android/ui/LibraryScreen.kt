@@ -52,18 +52,18 @@ class LibraryUiState(val lib: LibrarySession) {
 
     val selectedNote: String? get() = selection?.let(Shelf::noteId)
 
-    fun setExpanded(keys: Set<String>) {
+    fun updateExpanded(keys: Set<String>) {
         expanded = keys
         IvyApp.instance.catalog.saveExpanded(lib.ref.id, keys)
     }
 
-    fun toggle(key: String) = setExpanded(if (key in expanded) expanded - key else expanded + key)
+    fun toggle(key: String) = updateExpanded(if (key in expanded) expanded - key else expanded + key)
 
     /** Opens a note where it lives in the tree, expanding the path to it. */
     fun reveal(id: String) {
         val engine = lib.engine
         val note = engine.notes[id] ?: return
-        setExpanded(expanded + Shelf.revealKeys(note, engine.folders))
+        updateExpanded(expanded + Shelf.revealKeys(note, engine.folders))
         selection = Shelf.homeKey(note, engine.folders)
     }
 
@@ -81,7 +81,7 @@ class LibraryUiState(val lib: LibrarySession) {
     }
 
     fun newNote(folder: String) {
-        if (folder.isNotEmpty()) setExpanded(expanded + folder)
+        if (folder.isNotEmpty()) updateExpanded(expanded + folder)
         reveal(lib.engine.createNote(folderId = folder).id)
     }
 }
