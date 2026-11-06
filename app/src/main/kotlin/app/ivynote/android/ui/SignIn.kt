@@ -49,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -106,7 +107,7 @@ fun CloudSignInScreen(promoting: LibraryRef?, onBack: () -> Unit) {
     var info by remember { mutableStateOf<ServerInfo?>(null) }
     var probing by remember { mutableStateOf(false) }
     var probeError by remember { mutableStateOf<String?>(null) }
-    var probeRun by remember { mutableStateOf(0) }
+    var probeRun by remember { mutableIntStateOf(0) }
     var serverMenu by remember { mutableStateOf(false) }
     var custom by remember { mutableStateOf(false) }
 
@@ -424,7 +425,7 @@ fun SignInScreen(ref: LibraryRef, session: SessionStore) {
     val server = ref.server ?: return
     var info by remember { mutableStateOf<ServerInfo?>(null) }
     var probeError by remember { mutableStateOf<String?>(null) }
-    var probeRun by remember { mutableStateOf(0) }
+    var probeRun by remember { mutableIntStateOf(0) }
 
     var mode by rememberSaveable { mutableStateOf(Mode.LOGIN) }
     var identity by rememberSaveable { mutableStateOf(ref.account.orEmpty()) }

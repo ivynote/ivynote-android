@@ -500,7 +500,8 @@ fun NoteMenuItems(n: Note, ui: LibraryUiState, engine: SyncEngine, actions: Shel
 @Composable
 fun MoveDialog(engine: SyncEngine, note: Note, onDismiss: () -> Unit) {
     val c = Ivy.colors
-    val folders = remember(engine.revision.value) { Shelf.flatFolders(engine.folders.values) }
+    val revision by engine.revision.collectAsState()
+    val folders = remember(revision) { Shelf.flatFolders(engine.folders.values) }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("移动到") },
