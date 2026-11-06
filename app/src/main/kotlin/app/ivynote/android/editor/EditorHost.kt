@@ -27,6 +27,7 @@ import androidx.webkit.WebViewFeature
 import app.ivynote.android.BuildConfig
 import app.ivynote.android.IvyApp
 import app.ivynote.android.LibrarySession
+import app.ivynote.core.Attachment
 import app.ivynote.core.IvyJson
 import app.ivynote.core.Note
 import app.ivynote.core.SyncEngine
@@ -156,7 +157,7 @@ class EditorHost(appContext: Context, private val session: LibrarySession) {
     fun refreshKinds() {
         val kinds = buildJsonObject {
             for (a in engine.attachments.values) put(a.id, a.kind)
-            for (u in engine.uploads.values) put(u.id, app.ivynote.core.Attachment.kindOf(u.mime))
+            for (u in engine.uploads.values) put(u.id, Attachment.kindOf(u.mime))
         }
         val types = HashMap<String, String>()
         for (u in engine.uploads.values) types[u.id] = u.mime
