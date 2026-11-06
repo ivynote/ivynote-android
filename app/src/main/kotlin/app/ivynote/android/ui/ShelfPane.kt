@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -233,6 +234,8 @@ private fun LibraryHeader(ui: LibraryUiState, session: SessionStore?, state: app
     val libraries by catalog.libraries.collectAsState()
     val ref = ui.lib.ref
     var open by remember { mutableStateOf(false) }
+    var about by remember { mutableStateOf(false) }
+    if (about) AboutSheet(onDismiss = { about = false })
     Box(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { open = true }.padding(horizontal = 6.dp, vertical = 8.dp),
@@ -270,6 +273,8 @@ private fun LibraryHeader(ui: LibraryUiState, session: SessionStore?, state: app
                 onClick = { open = false; ui.showMedia = true })
             DropdownMenuItem(text = { Text("管理笔记库…") }, leadingIcon = { Icon(Icons.Outlined.Book, null) },
                 onClick = { open = false; catalog.open(null) })
+            DropdownMenuItem(text = { Text("关于与检查更新…") }, leadingIcon = { Icon(Icons.Outlined.Info, null) },
+                onClick = { open = false; about = true })
         }
     }
 }
