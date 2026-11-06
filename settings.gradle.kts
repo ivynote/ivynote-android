@@ -32,6 +32,8 @@ rootProject.name = "ivynote-android"
 include(":core")
 // The Android app. `-Pivy.coreOnly=true` leaves it out, for machines without
 // the Android SDK (the core tests need only a JDK).
-if (providers.gradleProperty("ivy.coreOnly").orNull != "true") {
+if (providers.gradleProperty("ivy.coreOnly").orNull == "true") {
+    rootProject.buildFileName = "core-only.gradle.kts"
+} else {
     include(":app")
 }
