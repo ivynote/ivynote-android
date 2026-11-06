@@ -72,6 +72,7 @@ import app.ivynote.core.ApiClient
 import app.ivynote.core.ApiError
 import app.ivynote.core.LibraryMigrator
 import app.ivynote.core.LibraryRef
+import app.ivynote.core.OfficialRegions
 import app.ivynote.core.ServerAddress
 import app.ivynote.core.ServerInfo
 import app.ivynote.core.SessionStore
@@ -80,8 +81,10 @@ import app.ivynote.core.User
 import app.ivynote.core.Validation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 import java.util.TimeZone
 
@@ -125,15 +128,30 @@ fun CloudSignInScreen(promoting: LibraryRef?, onBack: () -> Unit) {
     var migrationError by remember { mutableStateOf<String?>(null) }
     var newAccount by remember { mutableStateOf<Triple<ServerAddress, String, User>?>(null) }
 
-    val region = SyncRegion.of(server)
+    // The website may have moved an official node (e.g. to a temporary domain).
+    // Wait briefly for its answer before the first probe, else go on with the
+    // last known address; a late answer still moves an official choice.
+    val regions by OfficialRegions.regions.collectAsState()
+    var regionsAsked by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        val answer = app.appScope.async { OfficialRegions.refresh() }
+        withTimeoutOrNull(1_500) { answer.await() }
+        regionsAsked = true
+    }
+    LaunchedEffect(regions) {
+        SyncRegion.of(server)?.let { r -> if (r.server != server) server = r.server }
+    }
+
+    val region = remember(server, regions) { SyncRegion.of(server) }
     val canRegister = info?.canRegister ?: true
     val registering = promoting != null || mode == Mode.REGISTER
 
-    LaunchedEffect(server, probeRun) {
+    LaunchedEffect(server, probeRun, regionsAsked) {
         val target = server
         probing = true
         probeError = null
         info = null
+        if (!regionsAsked) return@LaunchedEffect
         try {
             info = ApiClient(target).probe()
         } catch (e: CancellationException) {

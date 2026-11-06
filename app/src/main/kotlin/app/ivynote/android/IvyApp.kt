@@ -9,6 +9,7 @@ import app.ivynote.android.platform.KeystoreCredentialStore
 import app.ivynote.android.platform.SharedPrefsStore
 import app.ivynote.core.IvyHttp
 import app.ivynote.core.LibraryCatalog
+import app.ivynote.core.OfficialRegions
 import app.ivynote.core.newEntityId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +40,8 @@ class IvyApp : Application() {
         instance = this
         IvyHttp.userAgent = "Ivynote-Android/${BuildConfig.VERSION_NAME} (Android ${Build.VERSION.RELEASE})"
         prefs = SharedPrefsStore(this)
+        // Official node addresses: the website's last answer, else the built-in ones.
+        OfficialRegions.install(prefs)
         catalog = LibraryCatalog(
             prefs = prefs,
             root = File(filesDir, "ivynote"),
