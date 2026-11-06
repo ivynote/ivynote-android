@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="canvas">#F7F8F9</color>
+    <color name="ivy">#287A52</color>
+    <color name="icon_background">#3A6B50</color>
+    <color name="icon_leaf">#FFFEFB</color>
+
+    <style name="Theme.Ivynote" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/canvas</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:colorAccent">@color/ivy</item>
+    </style>
+</resources>

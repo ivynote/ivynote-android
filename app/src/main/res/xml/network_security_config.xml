@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Self-hosted servers: the app itself only accepts plain http for local
+     network addresses (ServerAddress.parse) and warns about it; certificates
+     are always verified. User-installed CAs are trusted for servers behind a
+     private CA. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
