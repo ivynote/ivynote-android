@@ -65,6 +65,16 @@ class IvyApp : Application() {
     /** Attachments fetched for the editor, per library (guide 7.3). */
     fun mediaDir(libraryId: String) = File(cacheDir, "media/$libraryId")
 
+    /**
+     * Files that must not be evicted: uploads waiting for the network and a
+     * local library's attachments. Next to the database, so removing the
+     * library or signing out removes them too (guide 8.2).
+     */
+    fun filesDir(libraryId: String): File = File(catalog.storeFile(libraryId).parentFile, "files")
+
+    /** Scratch space for files on their way in (camera, picked files) or out (shared). */
+    fun transferDir(): File = File(cacheDir, "transfer").apply { mkdirs() }
+
     companion object {
         private const val DEVICE_KEY = "ivy.device"
         lateinit var instance: IvyApp

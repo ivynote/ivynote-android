@@ -29,6 +29,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.outlined.AddLink
+import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.Sell
 import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Delete
@@ -42,7 +48,9 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.StrikethroughS
 import androidx.compose.material.icons.outlined.Title
 import androidx.compose.material.icons.outlined.Toc
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -67,6 +75,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import app.ivynote.core.Links
 import app.ivynote.core.Outline
 import app.ivynote.core.SyncEngine
 import app.ivynote.core.displayTitle
@@ -92,6 +101,20 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
     var menu by remember { mutableStateOf(false) }
     var outline by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf(false) }
+    var tagging by remember { mutableStateOf(false) }
+    var backlinks by remember { mutableStateOf(false) }
+    var history by remember { mutableStateOf(false) }
+    var sharing by remember { mutableStateOf(false) }
+    val adding by lib.adding.collectAsState()
+    val linkCount = remember(revision, noteId) { Links.backlinks(noteId, engine.notes.values).size }
+
+    // Picked files land in the note they were picked for, even if another is open by the time they are ready.
+    var pickTarget by remember { mutableStateOf(noteId) }
+    val picker = rememberAttachmentPicker(lib) { added -> insertAttachment(lib, pickTarget, added.markdown) }
+    fun pick(open: () -> Unit) {
+        pickTarget = noteId
+        open()
+    }
 
     // Open the note in the editor once per note; afterwards only changes from elsewhere go in.
     LaunchedEffect(noteId) {
@@ -102,6 +125,8 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
     LaunchedEffect(dark) { host.setTheme(dark) }
     LaunchedEffect(note.body) { host.bodyChanged(noteId, note.body) }
     LaunchedEffect(note.isTrashed) { host.setReadonly(note.isTrashed) }
+    // New and uploaded files: embeds render as their kind.
+    LaunchedEffect(revision) { host.refreshKinds() }
 
     Column(Modifier.fillMaxSize().background(c.surface).then(if (wide) Modifier else Modifier.statusBarsPadding())) {
         // The bar: back, title, outline, more.
@@ -126,15 +151,33 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
                         Spacer(Modifier.width(6.dp))
                         Dot(c.warn)
                     }
+                    if (adding > 0) {
+                        Spacer(Modifier.width(6.dp))
+                        CircularProgressIndicator(Modifier.size(10.dp), strokeWidth = 1.5.dp, color = c.muted)
+                    }
                 }
             }
             if (focused && !wide) {
                 TextButton(onClick = { host.hideKeyboard() }) { Text("完成", color = c.ivy, fontWeight = FontWeight.SemiBold) }
             }
+            if (!note.isTrashed) {
+                IconButton(onClick = { sharing = true }) { Icon(Icons.Outlined.IosShare, contentDescription = "分享", tint = c.ink2) }
+            }
             IconButton(onClick = { outline = true }) { Icon(Icons.Outlined.Toc, contentDescription = "大纲", tint = c.ink2) }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = "更多", tint = c.ink2) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    if (!note.isTrashed) {
+                        DropdownMenuItem(text = { Text("标签…") }, leadingIcon = { Icon(Icons.Outlined.Sell, null) },
+                            onClick = { menu = false; tagging = true })
+                    }
+                    DropdownMenuItem(text = { Text(if (linkCount > 0) "反向链接（$linkCount）" else "反向链接") }, leadingIcon = { Icon(Icons.Outlined.Link, null) },
+                        onClick = { menu = false; backlinks = true })
+                    if (!engine.isLocal) {
+                        DropdownMenuItem(text = { Text("历史版本") }, leadingIcon = { Icon(Icons.Outlined.History, null) },
+                            onClick = { menu = false; history = true })
+                    }
+                    HorizontalDivider()
                     NoteMenuItems(note, ui, engine, ShelfActions(
                         newNote = ui::newNote, newFolder = {}, renameFolder = {}, deleteFolder = {},
                         renameNote = { renaming = true }, moveNote = { moving = true }, emptyTrash = {},
@@ -159,10 +202,30 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
             }
         }
 
+        // Tags and backlinks under the title (guide 11.3); hidden while typing, to leave room for the text.
+        if (!focused || wide) {
+            val hasTags = note.tags.any { engine.tags[it] != null }
+            if (hasTags || !note.isTrashed || linkCount > 0) {
+                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    NoteTagsRow(note, engine, editable = !note.isTrashed, onEdit = { tagging = true }, modifier = Modifier.weight(1f))
+                    if (linkCount > 0) {
+                        Text("$linkCount 条反向链接", fontSize = 12.5.sp, color = c.ivy,
+                            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { backlinks = true }.padding(horizontal = 6.dp, vertical = 3.dp))
+                    }
+                }
+            }
+        }
+
         Box(Modifier.weight(1f).fillMaxWidth().imePadding()) {
             EditorView(lib.editor, Modifier.fillMaxSize())
             if (focused && !note.isTrashed) {
-                FormatBar(host, Modifier.align(Alignment.BottomCenter).padding(10.dp))
+                FormatBar(host, Modifier.align(Alignment.BottomCenter).padding(10.dp), attach = { which ->
+                    when (which) {
+                        "photo" -> pick(picker.photos)
+                        "camera" -> pick(picker.camera)
+                        else -> pick(picker.files)
+                    }
+                })
             }
         }
         if (!focused) Spacer(Modifier.navigationBarsPadding())
@@ -174,12 +237,32 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
         }
     }
     if (moving) MoveDialog(engine, note, onDismiss = { moving = false })
+    if (tagging) TagPickerSheet(engine, note.id, onDismiss = { tagging = false })
+    if (backlinks) BacklinksSheet(engine, note, onOpen = { id -> backlinks = false; ui.reveal(id) }, onDismiss = { backlinks = false })
+    if (history) HistoryScreen(lib, note, onDismiss = { history = false })
+    if (sharing) ShareSheet(lib, note, onDismiss = { sharing = false })
     if (outline) {
         OutlineSheet(note.body, host.topLine.collectAsState().value, onPick = { line ->
             outline = false
             host.scrollToLine(line)
         }, onDismiss = { outline = false })
     }
+}
+
+/**
+ * Puts an attachment's embed into a note: at the cursor when the note is the
+ * one in the editor, otherwise on a new line at its end.
+ */
+private fun insertAttachment(lib: app.ivynote.android.LibrarySession, noteId: String, markdown: String) {
+    val host = lib.editor
+    host.refreshKinds()
+    if (host.noteId == noteId) {
+        host.insert(markdown)
+        return
+    }
+    val n = lib.engine.notes[noteId] ?: return
+    val body = if (n.body.isEmpty() || n.body.endsWith("\n")) n.body + markdown + "\n" else n.body + "\n" + markdown + "\n"
+    lib.engine.updateNote(noteId, SyncEngine.NotePatch(body = body))
 }
 
 /** The one editor web view of the library, moved into whichever note screen shows it. */
@@ -209,8 +292,13 @@ private fun EditorView(host: app.ivynote.android.editor.EditorHost, modifier: Mo
 
 /** The phone's insert bar above the keyboard (guide 3.2, 11.3): formatting the soft keyboard lacks. */
 @Composable
-private fun FormatBar(host: app.ivynote.android.editor.EditorHost, modifier: Modifier = Modifier) {
+private fun FormatBar(host: app.ivynote.android.editor.EditorHost, modifier: Modifier = Modifier, attach: (String) -> Unit) {
     val c = Ivy.colors
+    val files: List<Triple<String, ImageVector, String>> = listOf(
+        Triple("photo", Icons.Outlined.Image, "图片"),
+        Triple("camera", Icons.Outlined.PhotoCamera, "拍照"),
+        Triple("file", Icons.Outlined.AttachFile, "附件"),
+    )
     val items: List<Triple<String, ImageVector, String>> = listOf(
         Triple("h1", Icons.Outlined.Title, "标题"),
         Triple("bold", Icons.Outlined.FormatBold, "加粗"),
@@ -233,6 +321,9 @@ private fun FormatBar(host: app.ivynote.android.editor.EditorHost, modifier: Mod
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()).padding(start = 4.dp)) {
+                for ((which, icon, label) in files) {
+                    IconButton(onClick = { attach(which) }) { Icon(icon, contentDescription = label, tint = c.ink2) }
+                }
                 for ((cmd, icon, label) in items) {
                     IconButton(onClick = { host.command(cmd) }) { Icon(icon, contentDescription = label, tint = c.ink2) }
                 }

@@ -12,16 +12,67 @@ import java.io.InputStream
 import java.io.RandomAccessFile
 
 /**
- * Serves `ivy://res/<id>` to the editor page: from the disk cache when this
- * device has it, otherwise from `GET /attachments/{id}/raw` with the
- * account's token (guide 7.3). Attachments never change under the same id,
- * so a cached file is kept and works offline. Byte ranges pass through, so
- * videos seek. Runs on the web view's network thread.
+ * Serves `ivy://res/<id>` to the editor page: files kept on this device
+ * (queued uploads, a local library's attachments) as they are; others from
+ * the disk cache when this device has them, otherwise from
+ * `GET /attachments/{id}/raw` with the account's token (guide 7.3).
+ * Attachments never change under the same id, so a cached file is kept and
+ * works offline. Byte ranges pass through, so videos seek. Runs on the web
+ * view's network thread; [fetch] serves the native screens.
  */
-class AttachmentLoader(private val account: StoredAccount?, private val dir: File) {
+class AttachmentLoader(
+    private val account: StoredAccount?,
+    private val dir: File,
+    /** The file on this device for an id, if it lives here (thread-safe). */
+    private val local: (String) -> File? = { null },
+) {
+    /** MIME types of local files, refreshed from the main thread. */
+    @Volatile var localTypes: Map<String, String> = emptyMap()
+
+    /**
+     * The file for [id] on disk, downloading it into the cache first when
+     * needed; null when it cannot be had (offline, gone). Blocking: call on IO.
+     */
+    fun fetch(id: String, thumb: Boolean): File? {
+        if (!ID.matches(id)) return null
+        local(id)?.let { return it }
+        val file = File(dir, if (thumb) "$id.thumb" else id)
+        if (file.exists()) return file.also { it.setLastModified(System.currentTimeMillis()) }
+        val account = account ?: return null
+        val url = "${account.server.apiBase}/attachments/$id/raw" + if (thumb) "?thumb=1" else ""
+        val request = Request.Builder().url(url)
+            .header("Authorization", "Bearer ${account.token}")
+            .header("User-Agent", IvyHttp.userAgent)
+            .build()
+        return try {
+            IvyHttp.client.newCall(request).execute().use { response ->
+                val body = response.body
+                if (!response.isSuccessful || body == null) return null
+                dir.mkdirs()
+                val tmp = File(dir, file.name + ".part")
+                body.byteStream().use { input -> tmp.outputStream().use { input.copyTo(it) } }
+                File(dir, file.name + ".type").writeText(response.header("Content-Type") ?: "application/octet-stream")
+                tmp.renameTo(file)
+                prune()
+                file
+            }
+        } catch (e: Exception) {
+            Log.d("ivy", "attachment unavailable: ${e.javaClass.simpleName}")
+            null
+        }
+    }
+
+    /** The cached or local file's MIME type, if known. */
+    fun typeOf(id: String): String? =
+        localTypes[id] ?: File(dir, "$id.type").takeIf { it.exists() }?.readText()
 
     fun load(id: String, thumb: Boolean, range: String?): WebResourceResponse {
         if (!ID.matches(id)) return status(404, "Not Found")
+        local(id)?.let { f ->
+            // Kept here: no thumbnail, the original serves both.
+            val type = localTypes[id] ?: "application/octet-stream"
+            return if (range != null) partial(f, type, range) else whole(f, type)
+        }
         val file = File(dir, if (thumb) "$id.thumb" else id)
         val typeFile = File(dir, file.name + ".type")
         if (file.exists()) {
@@ -140,6 +191,18 @@ class AttachmentLoader(private val account: StoredAccount?, private val dir: Fil
     }
 
     companion object {
+        /** Puts a file that was just uploaded into the cache under its id. */
+        fun store(dir: File, id: String, source: File, mime: String) {
+            if (!ID.matches(id) || source.length() > MAX_CACHED) return
+            dir.mkdirs()
+            val target = File(dir, id)
+            if (target.exists()) return
+            val tmp = File(dir, "$id.part")
+            source.copyTo(tmp, overwrite = true)
+            File(dir, "$id.type").writeText(mime.ifEmpty { "application/octet-stream" })
+            tmp.renameTo(target)
+        }
+
         private val ID = Regex("[A-Za-z0-9_-]{8,64}")
         private val RANGE = Regex("bytes=(\\d*)-(\\d*)")
         private const val MAX_CACHED = 64L shl 20

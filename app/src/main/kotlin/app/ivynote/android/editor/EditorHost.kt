@@ -27,6 +27,7 @@ import androidx.webkit.WebViewFeature
 import app.ivynote.android.BuildConfig
 import app.ivynote.android.IvyApp
 import app.ivynote.android.LibrarySession
+import app.ivynote.core.Attachment
 import app.ivynote.core.IvyJson
 import app.ivynote.core.Note
 import app.ivynote.core.SyncEngine
@@ -60,7 +61,8 @@ class EditorHost(appContext: Context, private val session: LibrarySession) {
     private val engine: SyncEngine get() = session.engine
     private val context = MutableContextWrapper(app)
     private val main = Handler(Looper.getMainLooper())
-    private val media = AttachmentLoader(session.account, IvyApp.instance.mediaDir(session.ref.id))
+    /** Attachments for the page and for the native screens (thumbnails, previews). */
+    val media = AttachmentLoader(session.account, IvyApp.instance.mediaDir(session.ref.id)) { id -> session.engine.localFile(id) }
     private val assets = WebViewAssetLoader.Builder()
         .setDomain(HOST)
         .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(app))
@@ -117,8 +119,7 @@ class EditorHost(appContext: Context, private val session: LibrarySession) {
         pageBody = note.body
         _topLine.value = 0
         sendTitles()
-        val kinds = buildJsonObject { for (a in engine.attachments.values) put(a.id, a.kind) }
-        call("ivy.setKinds($kinds)")
+        refreshKinds()
         call("ivy.setTheme($dark)")
         val payload = buildJsonObject {
             put("id", note.id)
@@ -151,6 +152,26 @@ class EditorHost(appContext: Context, private val session: LibrarySession) {
         pageBody = body
         call("ivy.setBody(${JsonPrimitive(id)}, ${JsonPrimitive(body)})")
     }
+
+    /** Kinds of every attachment and queued file, so embeds render as image, video, audio or a file card. */
+    fun refreshKinds() {
+        val kinds = buildJsonObject {
+            for (a in engine.attachments.values) put(a.id, a.kind)
+            for (u in engine.uploads.values) put(u.id, Attachment.kindOf(u.mime))
+        }
+        val types = HashMap<String, String>()
+        for (u in engine.uploads.values) types[u.id] = u.mime
+        if (engine.isLocal) for (a in engine.attachments.values) types[a.id] = a.mime.ifEmpty { "application/octet-stream" }
+        media.localTypes = types
+        val json = kinds.toString()
+        if (json == sentKinds) return
+        sentKinds = json
+        call("ivy.setKinds($json)")
+    }
+    private var sentKinds = ""
+
+    /** Inserts Markdown at the cursor, on its own line (an attachment embed). */
+    fun insert(markdown: String) = call("ivy.insert(${JsonPrimitive(markdown)}, true)")
 
     fun setReadonly(ro: Boolean) = call("ivy.setReadonly($ro)")
 
@@ -280,6 +301,7 @@ class EditorHost(appContext: Context, private val session: LibrarySession) {
             (view.parent as? ViewGroup)?.removeView(view)
             view.destroy()
             queued.clear()
+            sentKinds = ""
             _webView.value = create()
             val id = noteId
             val note = id?.let { engine.notes[it] }

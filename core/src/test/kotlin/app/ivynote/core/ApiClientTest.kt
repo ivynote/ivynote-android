@@ -113,3 +113,58 @@ class SessionStoreTest {
         assertIs<SessionStore.State.SignedOut>(s.state.value)
     }
 }
+
+class NoteApiTest {
+    private val server = ServerAddress.parse("https://notes.example.com")
+
+    @Test fun shareIsNullUntilMadeAndPutSendsBothFields() = runTest {
+        val stub = StubTransport(mutableMapOf(
+            "GET /api/v1/notes/n1234567/share" to (200 to "null"),
+            "PUT /api/v1/notes/n1234567/share" to (200 to """{"id":"s1234567","noteId":"n1234567","enabled":true,"hasPassword":true,"password":"abcdef","expiresAt":0,"views":2}"""),
+        ))
+        val api = ApiClient(server, "tok", stub)
+        assertEquals(null, api.share("n1234567"))
+        val s = api.setShare("n1234567", enabled = true, expiresAt = 0, password = "abcdef")
+        assertTrue(s.live)
+        assertEquals("""{"enabled":true,"expiresAt":0,"password":"abcdef"}""", stub.sent.last().body!!.decodeToString())
+        assertEquals("https://notes.example.com/s/s1234567", api.shareLink(s.id))
+        api.setShare("n1234567", enabled = false, expiresAt = 5)
+        assertEquals("""{"enabled":false,"expiresAt":5}""", stub.sent.last().body!!.decodeToString())
+    }
+
+    @Test fun historyAndExport() = runTest {
+        val stub = StubTransport(mutableMapOf(
+            "GET /api/v1/notes/n1234567/history" to (200 to """[{"rev":3,"title":"T","device":"web","size":10,"createdAt":5}]"""),
+            "GET /api/v1/notes/n1234567/history/3" to (200 to """{"rev":3,"title":"T","body":"old"}"""),
+            "GET /api/v1/notes/n1234567/export" to (200 to "# T\n\nbody"),
+        ))
+        val api = ApiClient(server, "tok", stub)
+        assertEquals(3, api.history("n1234567").single().rev)
+        assertEquals("old", api.revision("n1234567", 3).body)
+        assertEquals("# T\n\nbody", api.exportNote("n1234567", public = true))
+        assertTrue(stub.sent.last().url.endsWith("/export?public=1"))
+    }
+
+    @Test fun uploadsAsMultipartAndListsMedia() = runTest {
+        val stub = StubTransport(mutableMapOf(
+            "POST /api/v1/attachments" to (200 to """{"attachment":{"id":"a1234567","name":"x.png","kind":"image","sha256":"ab","refs":0},"duplicate":true}"""),
+            "GET /api/v1/attachments" to (200 to """{"items":[{"id":"a1234567","name":"x.png","kind":"image","public":true}],"counts":{"all":1,"image":1,"orphaned":1},"policy":{"mode":"local","orphanDays":30,"trashDays":30}}"""),
+        ))
+        val api = ApiClient(server, "tok", stub)
+        val f = java.nio.file.Files.createTempFile("ivy", ".png").toFile()
+        try {
+            val r = api.upload(f, "x.png", "image/png")
+            assertTrue(r.duplicate)
+            val req = stub.sent.last()
+            assertEquals("x.png", req.upload?.name)
+            assertEquals("file", req.upload?.field)
+            assertEquals(null, req.body)
+        } finally {
+            f.delete()
+        }
+        val list = api.media(kind = "image", query = "a b")
+        assertEquals(30, list.policy.orphanDays)
+        assertTrue(list.items.single().public)
+        assertTrue(stub.sent.last().url.endsWith("/attachments?kind=image&q=a%20b"))
+    }
+}

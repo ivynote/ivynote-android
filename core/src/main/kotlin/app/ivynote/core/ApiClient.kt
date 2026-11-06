@@ -3,11 +3,15 @@ package app.ivynote.core
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.serializer
+import java.io.File
 import java.io.IOException
+import java.net.URLEncoder
 
 /**
  * The Ivynote REST API (`{server}/api/v1`), guide chapter 5. Holds no state
@@ -71,6 +75,77 @@ class ApiClient(
     @Serializable
     private data class PushBody(val changes: List<Change>)
 
+    // Attachments (guide 5.6, 7)
+
+    /** Uploads a file as `multipart/form-data`; the server de-duplicates by content. */
+    override suspend fun upload(file: File, name: String, mime: String): UploadResult {
+        val req = HttpRequest("POST", url("attachments"), headers(json = false), upload = FileUpload("file", name, mime, file))
+        return decode(execute(req), UploadResult.serializer())
+    }
+
+    suspend fun media(kind: String = "", trashed: Boolean = false, orphaned: Boolean = false, query: String = ""): MediaList {
+        val q = buildList {
+            if (kind.isNotEmpty()) add("kind=" + enc(kind))
+            if (trashed) add("trashed=1")
+            if (orphaned) add("orphaned=1")
+            if (query.isNotBlank()) add("q=" + enc(query.trim()))
+        }.joinToString("&")
+        return get("attachments" + if (q.isEmpty()) "" else "?$q")
+    }
+
+    suspend fun attachment(id: String): AttachmentDetail = get("attachments/${enc(id)}")
+
+    suspend fun renameAttachment(id: String, name: String): Attachment =
+        send("PATCH", "attachments/${enc(id)}", buildJsonObject { put("name", name) }, Attachment.serializer())
+
+    suspend fun trashAttachment(id: String): Attachment = send("POST", "attachments/${enc(id)}/trash", null, Attachment.serializer())
+    suspend fun restoreAttachment(id: String): Attachment = send("POST", "attachments/${enc(id)}/restore", null, Attachment.serializer())
+
+    /** Deletes for good; only a file in the trash (400 otherwise). */
+    suspend fun purgeAttachment(id: String) {
+        send("DELETE", "attachments/${enc(id)}", null, JsonObject.serializer())
+    }
+
+    /** A public `/r/` (or CDN) address; the same one again when it is already public. */
+    suspend fun publishAttachment(id: String): String = send("POST", "attachments/${enc(id)}/publish", null, PublicLink.serializer()).url
+    suspend fun unpublishAttachment(id: String): Attachment = send("DELETE", "attachments/${enc(id)}/publish", null, Attachment.serializer())
+
+    // Notes (guide 5.5)
+
+    suspend fun backlinks(noteId: String): List<Note> = sendRaw("GET", "notes/${enc(noteId)}/backlinks", null, ListSerializer(Note.serializer()))
+    suspend fun history(noteId: String): List<Revision> = sendRaw("GET", "notes/${enc(noteId)}/history", null, ListSerializer(Revision.serializer()))
+    suspend fun revision(noteId: String, rev: Long): Revision = get("notes/${enc(noteId)}/history/$rev")
+
+    /** The note as Markdown; [public] publishes its attachments and links them by public address. */
+    suspend fun exportNote(noteId: String, public: Boolean): String {
+        val req = HttpRequest("GET", url("notes/${enc(noteId)}/export" + if (public) "?public=1" else ""), headers(json = false) + ("Accept" to "text/markdown"))
+        return execute(req).body.decodeToString()
+    }
+
+    suspend fun share(noteId: String): Share? = sendRaw("GET", "notes/${enc(noteId)}/share", null, Share.serializer().nullable)
+
+    /**
+     * `enabled` and `expiresAt` are always written; [password] null keeps the
+     * current one, "" removes it (guide 5.5).
+     */
+    suspend fun setShare(noteId: String, enabled: Boolean, expiresAt: Millis, password: String? = null): Share {
+        val body = buildJsonObject {
+            put("enabled", enabled)
+            put("expiresAt", expiresAt)
+            if (password != null) put("password", password)
+        }
+        return send("PUT", "notes/${enc(noteId)}/share", body, Share.serializer())
+    }
+
+    suspend fun shares(): List<Share> = sendRaw("GET", "shares", null, ListSerializer(Share.serializer()))
+
+    suspend fun deleteShare(id: String) {
+        send("DELETE", "shares/${enc(id)}", null, JsonObject.serializer())
+    }
+
+    /** What people open in a browser: `{server}/s/{id}`. */
+    fun shareLink(id: String): String = "${server.base}/s/$id"
+
     // Plumbing
 
     fun url(path: String): String = "${server.apiBase}/$path"
@@ -87,9 +162,15 @@ class ApiClient(
     private suspend fun <T> send(method: String, path: String, body: JsonObject?, out: KSerializer<T>): T =
         sendRaw(method, path, body?.toString()?.toByteArray(Charsets.UTF_8), out)
 
-    private suspend fun <T> sendRaw(method: String, path: String, body: ByteArray?, out: KSerializer<T>): T {
+    private suspend fun <T> sendRaw(method: String, path: String, body: ByteArray?, out: KSerializer<T>): T =
+        decode(execute(HttpRequest(method, url(path), headers(body != null || method != "GET"), body)), out)
+
+    private fun enc(s: String): String = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+
+    /** Sends a request; throws [ApiError] unless the status is 2xx. */
+    private suspend fun execute(request: HttpRequest): HttpResponse {
         val response = try {
-            transport.send(HttpRequest(method, url(path), headers(body != null || method != "GET"), body))
+            transport.send(request)
         } catch (e: CancellationException) {
             throw e
         } catch (e: ApiError) {
@@ -105,6 +186,10 @@ class ApiClient(
             }.getOrNull().orEmpty()
             throw ApiError.Server(response.status, message)
         }
+        return response
+    }
+
+    private fun <T> decode(response: HttpResponse, out: KSerializer<T>): T {
         return try {
             IvyJson.decodeFromString(out, response.body.decodeToString())
         } catch (e: Exception) {
@@ -121,4 +206,8 @@ interface SyncTransport {
     suspend fun snapshot(): PullResponse
     suspend fun pull(since: Long): PullResponse
     suspend fun push(changes: List<Change>): PushResponse
+
+    /** `POST /attachments` (guide 7.1). */
+    suspend fun upload(file: File, name: String, mime: String): UploadResult =
+        throw ApiError.Server(501, "uploads are not supported")
 }

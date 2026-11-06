@@ -181,7 +181,7 @@ fun CloudSignInScreen(promoting: LibraryRef?, onBack: () -> Unit) {
         try {
             val content = withContext(Dispatchers.IO) {
                 val store = SqliteDocumentStore(catalog.storeFile(local.id))
-                try { LibraryMigrator.Content.read(store) } finally { store.close() }
+                try { LibraryMigrator.Content.read(store, app.filesDir(local.id)) } finally { store.close() }
             }
             val result = LibraryMigrator(ApiClient(srv, token), app.deviceId).run(content) { p -> progress = p }
             val ref = catalog.createSignedIn(srv, libraryName, token, user)
@@ -189,6 +189,9 @@ fun CloudSignInScreen(promoting: LibraryRef?, onBack: () -> Unit) {
             if (result.rejected.isNotEmpty()) {
                 // Opened anyway; the local library keeps everything.
                 android.widget.Toast.makeText(app, "${result.rejected.size} 项未能迁移，原内容仍保留在本地笔记库中。", android.widget.Toast.LENGTH_LONG).show()
+            }
+            if (result.failedFiles.isNotEmpty()) {
+                android.widget.Toast.makeText(app, "${result.failedFiles.size} 个文件未能上传，原文件仍保留在本地笔记库中。", android.widget.Toast.LENGTH_LONG).show()
             }
         } catch (e: CancellationException) {
             throw e
@@ -355,6 +358,7 @@ fun CloudSignInScreen(promoting: LibraryRef?, onBack: () -> Unit) {
 
 private fun progressText(p: LibraryMigrator.Progress?): String = when (p?.phase) {
     null, LibraryMigrator.Progress.Phase.CHECK -> "正在准备…"
+    LibraryMigrator.Progress.Phase.FILES -> "正在上传文件 ${p.done}/${p.total}"
     LibraryMigrator.Progress.Phase.NOTES -> "正在上传笔记 ${p.done}/${p.total}"
     LibraryMigrator.Progress.Phase.DONE -> "迁移完成，正在打开…"
 }
@@ -362,6 +366,8 @@ private fun progressText(p: LibraryMigrator.Progress?): String = when (p?.phase)
 private fun progressShare(p: LibraryMigrator.Progress?): Float = when (p?.phase) {
     null -> 0f
     LibraryMigrator.Progress.Phase.CHECK -> 0.02f
+    // Files fill the first half, notes the second.
+    LibraryMigrator.Progress.Phase.FILES -> if (p.total > 0) 0.5f * p.done / p.total else 0.5f
     LibraryMigrator.Progress.Phase.NOTES -> if (p.total > 0) p.done.toFloat() / p.total else 1f
     LibraryMigrator.Progress.Phase.DONE -> 1f
 }
