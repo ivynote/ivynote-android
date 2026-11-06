@@ -25,6 +25,10 @@ repository does not keep a copy.
 - **Sign in / sign up** to the official nodes (中国大陆 `web.ivynote.net`,
   全球 `web.ivynote.app`, preselected by the device's region) or a self-hosted
   server. The first account on an empty server becomes its admin.
+  The official addresses can be moved by the website without a release: the
+  sign-in screen asks `ivynote.net`, then `ivynote.app`, for
+  `/api/v1/regions`, keeps the answer, and otherwise uses the last answer or
+  the built-in addresses (`OfficialRegions`, as `regions.ts` on the desktop).
 - **Local-first sync** (guide ch. 6): everything is read from and written to the
   local SQLite database first; an outbox is pushed in the background with HLC
   field timestamps and `baseRev` for three-way body merges; incremental pulls
