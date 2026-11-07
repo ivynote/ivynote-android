@@ -50,6 +50,8 @@ fun RootScreen() {
                 LibrariesScreen()
             }
         }
+        // New versions: the dialog opens over whatever is on screen.
+        UpdateDialogHost()
     }
 }
 
@@ -153,7 +155,11 @@ fun OpenLibrary(ref: LibraryRef, account: StoredAccount?, session: SessionStore?
         }
         // Switching libraries or signing out: save now, push what is pending, then stop.
         DisposableEffect(lib) {
+            // Before an update replaces the app, this library is saved and synced.
+            val save: suspend () -> Unit = { lib.saveBeforeUpdate() }
+            app.updater.beforeInstall = save
             onDispose {
+                if (app.updater.beforeInstall === save) app.updater.beforeInstall = null
                 lib.deactivate()
                 app.appScope.launch {
                     lib.flush()

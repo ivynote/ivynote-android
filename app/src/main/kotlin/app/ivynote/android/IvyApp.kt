@@ -8,6 +8,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import app.ivynote.android.platform.KeystoreCredentialStore
 import app.ivynote.android.platform.SharedPrefsStore
+import app.ivynote.android.update.Updater
 import app.ivynote.core.IvyHttp
 import app.ivynote.core.Language
 import app.ivynote.core.LanguageSettings
@@ -40,6 +41,10 @@ class IvyApp : Application() {
     var systemLocale: Locale = Locale.getDefault()
         private set
 
+    /** New versions from the website: checks, the update dialog, downloads, install. */
+    lateinit var updater: Updater
+        private set
+
     /** For work that must finish after a screen is gone (pushing before sign-out). */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -66,6 +71,8 @@ class IvyApp : Application() {
             override fun onStart(owner: LifecycleOwner) { _foreground.value = true }
             override fun onStop(owner: LifecycleOwner) { _foreground.value = false }
         })
+        updater = Updater(this, appScope, prefs, foreground)
+        updater.start()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

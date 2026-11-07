@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
 /**
@@ -147,6 +148,21 @@ class LibrarySession private constructor(
         engine.sync()
         engine.persistNow()
         withContext(Dispatchers.IO) { store.flush() }
+    }
+
+    /**
+     * Before the app is replaced by an update: save to disk first, then send
+     * pending edits to the server without waiting long for it (as the desktop does).
+     */
+    suspend fun saveBeforeUpdate() {
+        if (closed) return
+        engine.persistNow()
+        withContext(Dispatchers.IO) { store.flush() }
+        if (api != null) {
+            withTimeoutOrNull(5_000) { engine.sync() }
+            engine.persistNow()
+            withContext(Dispatchers.IO) { store.flush() }
+        }
     }
 
     /** Stops everything; the database stays for the next open. */

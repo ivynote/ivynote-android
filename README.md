@@ -73,6 +73,17 @@ repository does not keep a copy.
   online the export publishes attachments and uses their public addresses,
   offline it is the local text.
 - **Search** across titles and bodies, ranked as on the web (guide 11.5).
+- **Updates**, as on the desktop (`AppUpdates` in core, `update/` in the app):
+  15 s after start and then every 6 hours the app asks `ivynote.net`, then
+  `ivynote.app`, for `GET /api/v1/update?platform=android&kind=apk&…` (never
+  GitHub). A new version opens a dialog with its notes: 立即更新 downloads the
+  APK (resumable, falling back to the other site, checked against size and
+  SHA-256), saves and syncs the open library, and hands it to the system
+  installer (`PackageInstaller`); 稍后 asks again tomorrow, 跳过此版本 stays
+  quiet about that version. 关于常青笔记 (library list, or the shelf menu)
+  checks by hand and turns the anonymous install id off. The first update asks
+  once to allow 常青笔记 to install apps. Debug builds (`app.ivynote.debug`)
+  cannot be updated by a release APK and point to the website instead.
 - Phones show one pane at a time; tablets and unfolded foldables show the
   shelf beside the note. Light and dark themes follow the system.
 - **Languages**: 简体中文 and English, as on the web (`core/…/Strings.kt`,

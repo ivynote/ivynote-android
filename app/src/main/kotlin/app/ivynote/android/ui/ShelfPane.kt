@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -239,6 +240,8 @@ private fun LibraryHeader(ui: LibraryUiState, session: SessionStore?, state: app
     var choosingLanguage by remember { mutableStateOf(false) }
     val s = LocalStrings.current
     if (choosingLanguage) LanguageDialog(onDismiss = { choosingLanguage = false })
+    var about by remember { mutableStateOf(false) }
+    if (about) AboutSheet(onDismiss = { about = false })
     Box(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { open = true }.padding(horizontal = 6.dp, vertical = 8.dp),
@@ -278,6 +281,8 @@ private fun LibraryHeader(ui: LibraryUiState, session: SessionStore?, state: app
                 onClick = { open = false; choosingLanguage = true })
             DropdownMenuItem(text = { Text(s.manageLibraries) }, leadingIcon = { Icon(Icons.Outlined.Book, null) },
                 onClick = { open = false; catalog.open(null) })
+            DropdownMenuItem(text = { Text("关于与检查更新…") }, leadingIcon = { Icon(Icons.Outlined.Info, null) },
+                onClick = { open = false; about = true })
         }
     }
 }
