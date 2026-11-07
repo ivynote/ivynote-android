@@ -18,11 +18,19 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 @Serializable(with = ServerAddressSerializer::class)
 class ServerAddress private constructor(val base: String, val host: String, val scheme: String) {
 
-    sealed class ParseError(message: String) : Exception(message) {
-        data object Empty : ParseError("请填写服务器地址")
-        data object Invalid : ParseError("服务器地址无效")
-        data class UnsupportedScheme(val scheme: String) : ParseError("不支持的协议：$scheme")
-        data class InsecureRemote(val host: String) : ParseError("$host 不是局域网地址，必须使用 https://")
+    sealed class ParseError : Exception() {
+        data object Empty : ParseError()
+        data object Invalid : ParseError()
+        data class UnsupportedScheme(val scheme: String) : ParseError()
+        data class InsecureRemote(val host: String) : ParseError()
+
+        override val message: String
+            get() = when (this) {
+                Empty -> L10n.s.serverEmpty
+                Invalid -> L10n.s.serverInvalid
+                is UnsupportedScheme -> L10n.s.unsupportedScheme(scheme)
+                is InsecureRemote -> L10n.s.insecureRemote(host)
+            }
     }
 
     /** `{server}/api/v1`. */

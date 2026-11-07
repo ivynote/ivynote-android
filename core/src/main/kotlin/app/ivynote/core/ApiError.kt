@@ -1,15 +1,21 @@
 package app.ivynote.core
 
 /** What can go wrong talking to a server (guide 5.1). */
-sealed class ApiError(message: String) : Exception(message) {
+sealed class ApiError : Exception() {
     /** The server answered with an error status and `{"error": "..."}`. */
-    class Server(val code: Int, val serverMessage: String) : ApiError(describe(code, serverMessage))
+    class Server(val code: Int, val serverMessage: String) : ApiError() {
+        override val message: String get() = describe(code, serverMessage)
+    }
 
     /** No answer: offline, DNS, TLS, timeout. Work offline, retry later. */
-    class Unreachable(val detail: String) : ApiError("无法连接服务器：$detail")
+    class Unreachable(val detail: String) : ApiError() {
+        override val message: String get() = L10n.s.unreachable(detail)
+    }
 
     /** The server answered, but not with what an Ivynote server sends. */
-    class InvalidResponse : ApiError("这个地址不是常青笔记服务器")
+    class InvalidResponse : ApiError() {
+        override val message: String get() = L10n.s.notIvynote
+    }
 
     val status: Int? get() = (this as? Server)?.code
 
@@ -26,9 +32,9 @@ sealed class ApiError(message: String) : Exception(message) {
 
     companion object {
         private fun describe(status: Int, message: String): String = when {
-            status == 429 -> "尝试次数过多，请 15 分钟后再试"
-            status >= 500 -> "服务器暂时不可用（$status）"
-            message.isEmpty() -> "请求失败（$status）"
+            status == 429 -> L10n.s.tooManyAttempts
+            status >= 500 -> L10n.s.serverUnavailable(status)
+            message.isEmpty() -> L10n.s.requestFailedStatus(status)
             else -> message
         }
     }

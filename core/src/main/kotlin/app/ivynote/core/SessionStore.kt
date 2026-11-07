@@ -83,6 +83,32 @@ class SessionStore(
         _state.value = State.SignedIn(account)
     }
 
+    /**
+     * Saves the account's interface language on the server (`PATCH /me`).
+     * False when it could not be sent (offline): the caller tries again later.
+     */
+    suspend fun pushLanguage(tag: String): Boolean {
+        val current = account ?: return false
+        val api = api ?: return false
+        return try {
+            val user = api.setLanguage(tag)
+            if (account?.token == current.token) {
+                val updated = current.copy(user = user)
+                runCatching { store.save(updated) }
+                _state.value = State.SignedIn(updated)
+            }
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: ApiError) {
+            if (e.endsSession) expire(e)
+            // A refused tag will not succeed later either.
+            !e.isTransient
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     /** Revokes this device's token (best effort) and forgets the account. */
     suspend fun signOut() {
         api?.let { runCatching { it.logout() } }
@@ -101,7 +127,7 @@ class SessionStore(
         // The token is no longer valid. Local notes and the outbox are kept
         // (guide 5.1): signing in again resumes syncing them.
         runCatching { store.clear() }
-        _notice.value = if (error.status == 403) error.message ?: "账户不可用" else "登录已过期，请重新登录"
+        _notice.value = if (error.status == 403) error.message ?: L10n.s.accountUnavailable else L10n.s.sessionExpired
         _offline.value = false
         _state.value = State.SignedOut
     }

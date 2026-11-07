@@ -25,6 +25,8 @@ data class User(
     val role: String = "user",
     val status: String = "active",
     val aiAvailable: Boolean = false,
+    /** The interface language the user chose (`zh`, `en`…); "" follows the device. */
+    val language: String = "",
 ) {
     val name: String get() = displayName.ifEmpty { username }
     val isAdmin: Boolean get() = role == "admin"
@@ -45,11 +47,11 @@ object Validation {
     private val usernamePattern = Regex("[A-Za-z0-9][A-Za-z0-9_.\\-]{1,31}")
 
     fun username(s: String): String? =
-        if (usernamePattern.matches(s)) null else "用户名为 2–32 位字母、数字、_ . -，以字母或数字开头"
+        if (usernamePattern.matches(s)) null else L10n.s.usernameRule
 
     fun password(s: String): String? = when {
-        s.codePointCount(0, s.length) < 8 -> "密码至少 8 个字符"
-        s.toByteArray(Charsets.UTF_8).size > 72 -> "密码最多 72 字节"
+        s.codePointCount(0, s.length) < 8 -> L10n.s.passwordTooShort
+        s.toByteArray(Charsets.UTF_8).size > 72 -> L10n.s.passwordTooLong
         else -> null
     }
 }

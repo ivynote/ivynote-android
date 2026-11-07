@@ -86,6 +86,16 @@ repository does not keep a copy.
   cannot be updated by a release APK and point to the website instead.
 - Phones show one pane at a time; tablets and unfolded foldables show the
   shelf beside the note. Light and dark themes follow the system.
+- **Languages**: 简体中文 and English, as on the web (`core/…/Strings.kt`,
+  one interface, so a string missing from a language does not compile).
+  The language follows the system (the first supported one in its list,
+  English otherwise) until one is picked under 语言 · Language (library
+  menu, libraries list, account sheet); the choice is remembered. Signed in
+  to a synced library, the account's language (`User.language`) comes first;
+  choosing there also saves it to the account (`PATCH /me {language}`, kept
+  as pending and sent later when offline; "follow the system" clears it).
+  A new account is registered with the language in use (`language` in
+  `POST /auth/register`). See guide §界面语言 and `LanguageSettings`.
 
 ## Layout
 

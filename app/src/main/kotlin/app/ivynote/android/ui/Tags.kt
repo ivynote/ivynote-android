@@ -64,10 +64,6 @@ import app.ivynote.core.Tag
 /** The six tag colors of the web client (`--tag-*-fg`), "" for none. */
 val TAG_COLORS = listOf("", "green", "blue", "amber", "pink", "purple", "gray")
 
-private val TAG_NAMES = mapOf(
-    "" to "无", "green" to "绿", "blue" to "蓝", "amber" to "琥珀", "pink" to "粉", "purple" to "紫", "gray" to "灰",
-)
-
 @Composable
 fun tagColor(color: String): Color {
     val dark = Ivy.colors.dark
@@ -114,7 +110,7 @@ fun NoteTagsRow(note: Note, engine: SyncEngine, editable: Boolean, onEdit: () ->
             ) {
                 Icon(Icons.Outlined.Add, null, tint = c.faint, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(2.dp))
-                Text("标签", fontSize = 12.5.sp, color = c.faint)
+                Text(LocalStrings.current.tags, fontSize = 12.5.sp, color = c.faint)
             }
         }
     }
@@ -138,6 +134,7 @@ fun TagPickerSheet(engine: SyncEngine, noteId: String, onDismiss: () -> Unit) {
     val shown = if (key.isEmpty()) all else all.filter { Links.normalizeTitle(it.name).contains(key) }
     val exact = engine.tagNamed(clean)
     val full = note.tags.size >= SyncEngine.MAX_NOTE_TAGS
+    val s = LocalStrings.current
 
     fun submit() {
         if (clean.isEmpty()) return
@@ -148,7 +145,7 @@ fun TagPickerSheet(engine: SyncEngine, noteId: String, onDismiss: () -> Unit) {
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = c.surface) {
         Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("标签", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = c.ink, modifier = Modifier.weight(1f))
+            Text(s.tags, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = c.ink, modifier = Modifier.weight(1f))
             Text("${note.tags.size}/${SyncEngine.MAX_NOTE_TAGS}", fontSize = 13.sp, color = c.faint)
         }
         Row(
@@ -159,7 +156,7 @@ fun TagPickerSheet(engine: SyncEngine, noteId: String, onDismiss: () -> Unit) {
             Icon(Icons.Outlined.Search, null, tint = c.faint, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Box(Modifier.weight(1f)) {
-                if (query.isEmpty()) Text("搜索或创建标签", color = c.faint, fontSize = 15.sp)
+                if (query.isEmpty()) Text(s.searchOrCreateTag, color = c.faint, fontSize = 15.sp)
                 BasicTextField(
                     value = query,
                     onValueChange = { query = it.take(60) },
@@ -172,18 +169,18 @@ fun TagPickerSheet(engine: SyncEngine, noteId: String, onDismiss: () -> Unit) {
                 )
             }
             if (query.isNotEmpty()) {
-                Icon(Icons.Outlined.Close, contentDescription = "清除", tint = c.faint,
+                Icon(Icons.Outlined.Close, contentDescription = s.clear, tint = c.faint,
                     modifier = Modifier.size(18.dp).clip(CircleShape).clickable { query = "" })
             }
         }
-        if (full) Text("一篇笔记最多 ${SyncEngine.MAX_NOTE_TAGS} 个标签", color = c.warn, fontSize = 12.5.sp, modifier = Modifier.padding(horizontal = 24.dp))
+        if (full) Text(s.maxTags(SyncEngine.MAX_NOTE_TAGS), color = c.warn, fontSize = 12.5.sp, modifier = Modifier.padding(horizontal = 24.dp))
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)) {
             if (clean.isNotEmpty() && exact == null) {
                 item(key = "create") {
                     PickerRow(enabled = !full, onClick = { submit() }) {
                         Icon(Icons.Outlined.Add, null, tint = c.ivy, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(12.dp))
-                        Text("创建「$clean」", color = c.ivy, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                        Text(s.createTag(clean), color = c.ivy, fontSize = 15.sp, modifier = Modifier.weight(1f))
                     }
                 }
             }
@@ -197,11 +194,11 @@ fun TagPickerSheet(engine: SyncEngine, noteId: String, onDismiss: () -> Unit) {
                     Box(Modifier.size(10.dp).clip(CircleShape).background(tagColor(t.color)))
                     Spacer(Modifier.width(8.dp))
                     Text(t.name, color = c.ink, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { editing = t }) { Icon(Icons.Outlined.Edit, contentDescription = "编辑标签", tint = c.faint, modifier = Modifier.size(18.dp)) }
+                    IconButton(onClick = { editing = t }) { Icon(Icons.Outlined.Edit, contentDescription = s.editTag, tint = c.faint, modifier = Modifier.size(18.dp)) }
                 }
             }
             if (all.isEmpty() && clean.isEmpty()) {
-                item { Text("还没有标签。输入名称即可创建。", color = c.muted, fontSize = 14.sp, modifier = Modifier.padding(24.dp)) }
+                item { Text(s.noTags, color = c.muted, fontSize = 14.sp, modifier = Modifier.padding(24.dp)) }
             }
         }
     }
@@ -227,46 +224,47 @@ fun TagEditDialog(engine: SyncEngine, tag: Tag, onDismiss: () -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
     val clean = SyncEngine.cleanTagName(name)
     val clash = engine.tagNamed(clean)?.takeIf { it.id != tag.id }
+    val s = LocalStrings.current
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("编辑标签") },
+        title = { Text(s.editTag) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 OutlinedTextField(
                     value = name, onValueChange = { name = it.take(60) }, singleLine = true,
-                    label = { Text("名称") }, prefix = { Text("#") },
+                    label = { Text(s.name) }, prefix = { Text("#") },
                     isError = clash != null,
-                    supportingText = if (clash != null) ({ Text("已有同名标签") }) else null,
+                    supportingText = if (clash != null) ({ Text(s.tagExists) }) else null,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Text("颜色", fontSize = 13.sp, color = c.muted)
+                Text(s.color, fontSize = 13.sp, color = c.muted)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     for (k in TAG_COLORS) {
                         val fg = tagColor(k)
                         Box(
                             Modifier.size(34.dp).clip(CircleShape).background(fg.copy(alpha = if (k.isEmpty()) 0.08f else 0.85f))
                                 .border(2.dp, if (k == color) c.ink else Color.Transparent, CircleShape)
-                                .clickable(onClickLabel = TAG_NAMES[k]) { color = k },
+                                .clickable(onClickLabel = s.tagColor(k)) { color = k },
                             contentAlignment = Alignment.Center,
                         ) {
-                            if (k == color) Icon(Icons.Outlined.Check, contentDescription = TAG_NAMES[k], tint = if (k.isEmpty()) c.ink else c.surface, modifier = Modifier.size(16.dp))
+                            if (k == color) Icon(Icons.Outlined.Check, contentDescription = s.tagColor(k), tint = if (k.isEmpty()) c.ink else c.surface, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
                 HorizontalDivider(color = c.line)
-                TextButton(onClick = { confirmDelete = true }) { Text("删除标签", color = c.danger) }
+                TextButton(onClick = { confirmDelete = true }) { Text(s.deleteTag, color = c.danger) }
             }
         },
         confirmButton = {
             TextButton(enabled = clean.isNotEmpty() && clash == null, onClick = {
                 engine.updateTag(tag.id, name = clean, color = color)
                 onDismiss()
-            }) { Text("保存") }
+            }) { Text(s.save) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } },
     )
     if (confirmDelete) {
-        ConfirmDialog("删除标签？", "「#${tag.name}」会从所有笔记上移除，笔记本身不受影响。", "删除", onDismiss = { confirmDelete = false }) {
+        ConfirmDialog(s.deleteTagTitle, s.deleteTagMessage(tag.name), s.delete, onDismiss = { confirmDelete = false }) {
             engine.deleteTag(tag.id)
             onDismiss()
         }

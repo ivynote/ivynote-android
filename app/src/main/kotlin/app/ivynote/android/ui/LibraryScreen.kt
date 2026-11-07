@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.ivynote.android.IvyApp
 import app.ivynote.android.LibrarySession
+import app.ivynote.core.L10n
 import app.ivynote.core.SessionStore
 import app.ivynote.core.Shelf
 import app.ivynote.core.displayTitle
@@ -161,7 +162,7 @@ fun LibraryScreen(lib: LibrarySession, session: SessionStore?) {
     val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(refused) {
         val f = refused ?: return@LaunchedEffect
-        toast(context, "「${f.name}」未能上传：${f.message}", long = true)
+        toast(context, L10n.s.uploadRefused(f.name, f.message), long = true)
         engine.clearUploadFailure()
     }
 
@@ -169,21 +170,22 @@ fun LibraryScreen(lib: LibrarySession, session: SessionStore?) {
         AccountSheet(lib, session, onDismiss = { ui.showAccount = false })
     }
 
+    val s = LocalStrings.current
     conflict?.let { c ->
         AlertDialog(
             onDismissRequest = { engine.clearConflict() },
-            title = { Text("内容冲突") },
+            title = { Text(s.conflictTitle) },
             text = {
-                val name = engine.notes[c.noteId]?.let(::displayTitle) ?: "笔记"
-                Text("「$name」在其他设备上也改动了同一处。服务器保留了它的版本，你的修改已另存为冲突副本。")
+                val name = engine.notes[c.noteId]?.let(::displayTitle) ?: s.note
+                Text(s.conflictMessage(name))
             },
             confirmButton = {
                 TextButton(onClick = {
                     ui.reveal(c.copyId)
                     engine.clearConflict()
-                }) { Text("打开副本") }
+                }) { Text(s.openCopy) }
             },
-            dismissButton = { TextButton(onClick = { engine.clearConflict() }) { Text("好") } },
+            dismissButton = { TextButton(onClick = { engine.clearConflict() }) { Text(s.ok) } },
         )
     }
 }
@@ -197,6 +199,6 @@ fun EmptyPaper() {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         IvyLeaf(64.dp, alpha = 0.7f)
-        Text("像常春藤一样，你的笔记彼此相连、四季常青。", color = Ivy.colors.muted, fontSize = 14.sp)
+        Text(LocalStrings.current.tagline, color = Ivy.colors.muted, fontSize = 14.sp)
     }
 }

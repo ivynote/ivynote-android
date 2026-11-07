@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.ivynote.android.R
+import app.ivynote.core.L10n
 import app.ivynote.core.LibraryRef
 import app.ivynote.core.SyncEngine
 import app.ivynote.core.SyncState
@@ -66,8 +67,8 @@ import kotlinx.coroutines.delay
 fun TextInputDialog(
     title: String,
     initial: String = "",
-    placeholder: String = "名称",
-    confirm: String = "保存",
+    placeholder: String = L10n.s.name,
+    confirm: String = L10n.s.save,
     message: String? = null,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
@@ -92,7 +93,7 @@ fun TextInputDialog(
             }
         },
         confirmButton = { TextButton(onClick = { onConfirm(value.text); onDismiss() }) { Text(confirm) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(LocalStrings.current.cancel) } },
     )
     LaunchedEffect(Unit) {
         delay(100)
@@ -118,7 +119,7 @@ fun ConfirmDialog(
                 Text(confirm, color = if (destructive) Ivy.colors.danger else Ivy.colors.ivy)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(LocalStrings.current.cancel) } },
     )
 }
 
@@ -181,17 +182,18 @@ fun SyncStatusLine(engine: SyncEngine, state: SyncState, modifier: Modifier = Mo
             tick++
         }
     }
+    val s = LocalStrings.current
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             val (icon: ImageVector?, text: String, tint: Color) = when {
-                engine.isLocal -> Triple(Icons.Outlined.CloudOff, "仅保存在本机 · 未同步", c.muted)
-                state.status == SyncState.Status.SYNCING -> Triple(null, if (state.initial) "正在下载笔记…" else "同步中…", c.muted)
+                engine.isLocal -> Triple(Icons.Outlined.CloudOff, s.localUnsynced, c.muted)
+                state.status == SyncState.Status.SYNCING -> Triple(null, if (state.initial) s.downloadingNotes else s.syncing, c.muted)
                 state.status == SyncState.Status.OFFLINE ->
-                    Triple(Icons.Outlined.WifiOff, if (state.pending > 0) "离线 · ${state.pending} 条待同步" else "离线", c.warn)
-                state.status == SyncState.Status.ERROR -> Triple(Icons.Outlined.Warning, "同步出错", c.danger)
-                state.pending > 0 -> Triple(Icons.Outlined.Sync, "${state.pending} 条待同步", c.muted)
-                state.lastSyncAt > 0 -> Triple(Icons.Outlined.CloudDone, "已同步 · ${relative(state.lastSyncAt, tick)}", c.muted)
-                else -> Triple(null, "尚未同步", c.muted)
+                    Triple(Icons.Outlined.WifiOff, if (state.pending > 0) s.offlinePending(state.pending) else s.offline, c.warn)
+                state.status == SyncState.Status.ERROR -> Triple(Icons.Outlined.Warning, s.syncError, c.danger)
+                state.pending > 0 -> Triple(Icons.Outlined.Sync, s.pending(state.pending), c.muted)
+                state.lastSyncAt > 0 -> Triple(Icons.Outlined.CloudDone, s.synced(relative(state.lastSyncAt, tick)), c.muted)
+                else -> Triple(null, s.neverSynced, c.muted)
             }
             if (state.status == SyncState.Status.SYNCING && !engine.isLocal) {
                 CircularProgressIndicator(Modifier.size(11.dp), strokeWidth = 1.5.dp, color = c.muted)
@@ -203,7 +205,7 @@ fun SyncStatusLine(engine: SyncEngine, state: SyncState, modifier: Modifier = Mo
             Text(text, fontSize = 12.5.sp, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (state.blocked > 0) {
-            Text("${state.blocked} 条更改被服务器拒绝", fontSize = 12.5.sp, color = c.warn)
+            Text(s.blocked(state.blocked), fontSize = 12.5.sp, color = c.warn)
         }
     }
 }
@@ -211,23 +213,24 @@ fun SyncStatusLine(engine: SyncEngine, state: SyncState, modifier: Modifier = Mo
 @Suppress("UNUSED_PARAMETER")
 fun relative(at: Long, tick: Long = 0): String {
     val now = System.currentTimeMillis()
-    if (now - at < 60_000) return "刚刚"
+    if (now - at < 60_000) return L10n.s.justNow
     return DateUtils.getRelativeTimeSpanString(at, now, DateUtils.MINUTE_IN_MILLIS).toString()
 }
 
-/** 今天 16:20、昨天、周几、10月29日、2025年3月1日 (guide 11.7). */
+/** 今天 16:20、昨天、周几、10月29日、2025年3月1日 (guide 11.7), in the interface language. */
 fun shortDate(at: Long): String {
+    val s = L10n.s
     val now = java.util.Calendar.getInstance()
     val then = java.util.Calendar.getInstance().apply { timeInMillis = at }
     val days = ((startOfDay(now) - startOfDay(then)) / 86_400_000L).toInt()
     val time = String.format(java.util.Locale.ROOT, "%02d:%02d", then.get(java.util.Calendar.HOUR_OF_DAY), then.get(java.util.Calendar.MINUTE))
     return when {
         days <= 0 -> time
-        days == 1 -> "昨天 $time"
-        days < 7 -> arrayOf("周日", "周一", "周二", "周三", "周四", "周五", "周六")[then.get(java.util.Calendar.DAY_OF_WEEK) - 1]
+        days == 1 -> s.yesterday(time)
+        days < 7 -> s.weekday(then.get(java.util.Calendar.DAY_OF_WEEK))
         then.get(java.util.Calendar.YEAR) == now.get(java.util.Calendar.YEAR) ->
-            "${then.get(java.util.Calendar.MONTH) + 1}月${then.get(java.util.Calendar.DAY_OF_MONTH)}日"
-        else -> "${then.get(java.util.Calendar.YEAR)}年${then.get(java.util.Calendar.MONTH) + 1}月${then.get(java.util.Calendar.DAY_OF_MONTH)}日"
+            s.monthDay(then.get(java.util.Calendar.MONTH) + 1, then.get(java.util.Calendar.DAY_OF_MONTH))
+        else -> s.yearMonthDay(then.get(java.util.Calendar.YEAR), then.get(java.util.Calendar.MONTH) + 1, then.get(java.util.Calendar.DAY_OF_MONTH))
     }
 }
 

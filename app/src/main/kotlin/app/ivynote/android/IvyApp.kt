@@ -1,6 +1,7 @@
 package app.ivynote.android
 
 import android.app.Application
+import android.content.res.Configuration
 import android.os.Build
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -9,6 +10,8 @@ import app.ivynote.android.platform.KeystoreCredentialStore
 import app.ivynote.android.platform.SharedPrefsStore
 import app.ivynote.android.update.Updater
 import app.ivynote.core.IvyHttp
+import app.ivynote.core.Language
+import app.ivynote.core.LanguageSettings
 import app.ivynote.core.LibraryCatalog
 import app.ivynote.core.OfficialRegions
 import app.ivynote.core.newEntityId
@@ -18,7 +21,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.io.File
+import java.util.Locale
 
 /**
  * Holds what outlives screens: the library catalog and the open library
@@ -28,6 +33,12 @@ class IvyApp : Application() {
     lateinit var prefs: SharedPrefsStore
         private set
     lateinit var catalog: LibraryCatalog
+        private set
+    lateinit var language: LanguageSettings
+        private set
+
+    /** The system's locale (or this app's, set in the system settings), before ours replaces the default. */
+    var systemLocale: Locale = Locale.getDefault()
         private set
 
     /** New versions from the website: checks, the update dialog, downloads, install. */
@@ -45,6 +56,10 @@ class IvyApp : Application() {
         instance = this
         IvyHttp.userAgent = "Ivynote-Android/${BuildConfig.VERSION_NAME} (Android ${Build.VERSION.RELEASE})"
         prefs = SharedPrefsStore(this)
+        systemLocale = systemLocales(resources.configuration).firstOrNull() ?: Locale.getDefault()
+        language = LanguageSettings(prefs, systemLocales(resources.configuration).map { it.toLanguageTag() })
+        applyLocale(language.current.value)
+        appScope.launch { language.current.collect { applyLocale(it) } }
         // Official node addresses: the website's last answer, else the built-in ones.
         OfficialRegions.install(prefs)
         catalog = LibraryCatalog(
@@ -58,6 +73,31 @@ class IvyApp : Application() {
         })
         updater = Updater(this, appScope, prefs, foreground)
         updater.start()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // The system language changed: the framework has reset the default locale.
+        systemLocale = systemLocales(newConfig).firstOrNull() ?: systemLocale
+        language.systemChanged(systemLocales(newConfig).map { it.toLanguageTag() })
+        applyLocale(language.current.value)
+    }
+
+    /**
+     * Dates, relative times and number formats follow the interface
+     * language. The region stays the system's (it picks the sync node).
+     */
+    private fun applyLocale(lang: Language) {
+        // The system's own English (en-GB dates); Chinese is always the simplified script.
+        val base = if (lang == Language.EN && systemLocale.language == "en") systemLocale else null
+        val locale = base ?: Locale.Builder().setLanguage(lang.tag).setRegion(systemLocale.country.takeIf { it.length == 2 } ?: "")
+            .apply { if (lang == Language.ZH) setScript("Hans") }.build()
+        Locale.setDefault(locale)
+    }
+
+    private fun systemLocales(config: Configuration): List<Locale> {
+        val list = config.locales
+        return (0 until list.size()).map { list[it] }
     }
 
     /** This install's HLC node and `device` name, e.g. `android-a1b2c3d4` (guide 6.2). */

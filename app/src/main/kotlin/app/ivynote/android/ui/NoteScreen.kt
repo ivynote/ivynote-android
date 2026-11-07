@@ -75,6 +75,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import app.ivynote.core.L10n
 import app.ivynote.core.Links
 import app.ivynote.core.Outline
 import app.ivynote.core.SyncEngine
@@ -92,6 +93,7 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
     val engine = lib.engine
     val host = lib.editor
     val c = Ivy.colors
+    val s = LocalStrings.current
     val dark = isSystemInDarkTheme()
     val revision by engine.revision.collectAsState()
     val focused by host.focused.collectAsState()
@@ -123,6 +125,7 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
         host.open(n, focus = n.body.isEmpty() && n.title.isEmpty() && !n.isTrashed)
     }
     LaunchedEffect(dark) { host.setTheme(dark) }
+    LaunchedEffect(s) { host.setLanguage(L10n.language) }
     LaunchedEffect(note.body) { host.bodyChanged(noteId, note.body) }
     LaunchedEffect(note.isTrashed) { host.setReadonly(note.isTrashed) }
     // New and uploaded files: embeds render as their kind.
@@ -133,7 +136,7 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             if (!wide) {
                 IconButton(onClick = { host.hideKeyboard(); onBack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = c.ink2)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = s.back, tint = c.ink2)
                 }
             } else {
                 Spacer(Modifier.width(12.dp))
@@ -158,23 +161,23 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
                 }
             }
             if (focused && !wide) {
-                TextButton(onClick = { host.hideKeyboard() }) { Text("完成", color = c.ivy, fontWeight = FontWeight.SemiBold) }
+                TextButton(onClick = { host.hideKeyboard() }) { Text(s.done, color = c.ivy, fontWeight = FontWeight.SemiBold) }
             }
             if (!note.isTrashed) {
-                IconButton(onClick = { sharing = true }) { Icon(Icons.Outlined.IosShare, contentDescription = "分享", tint = c.ink2) }
+                IconButton(onClick = { sharing = true }) { Icon(Icons.Outlined.IosShare, contentDescription = s.share, tint = c.ink2) }
             }
-            IconButton(onClick = { outline = true }) { Icon(Icons.Outlined.Toc, contentDescription = "大纲", tint = c.ink2) }
+            IconButton(onClick = { outline = true }) { Icon(Icons.Outlined.Toc, contentDescription = s.outline, tint = c.ink2) }
             Box {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = "更多", tint = c.ink2) }
+                IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = s.more, tint = c.ink2) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     if (!note.isTrashed) {
-                        DropdownMenuItem(text = { Text("标签…") }, leadingIcon = { Icon(Icons.Outlined.Sell, null) },
+                        DropdownMenuItem(text = { Text(s.tagsEllipsis) }, leadingIcon = { Icon(Icons.Outlined.Sell, null) },
                             onClick = { menu = false; tagging = true })
                     }
-                    DropdownMenuItem(text = { Text(if (linkCount > 0) "反向链接（$linkCount）" else "反向链接") }, leadingIcon = { Icon(Icons.Outlined.Link, null) },
+                    DropdownMenuItem(text = { Text(if (linkCount > 0) s.backlinksMenu(linkCount) else s.backlinks) }, leadingIcon = { Icon(Icons.Outlined.Link, null) },
                         onClick = { menu = false; backlinks = true })
                     if (!engine.isLocal) {
-                        DropdownMenuItem(text = { Text("历史版本") }, leadingIcon = { Icon(Icons.Outlined.History, null) },
+                        DropdownMenuItem(text = { Text(s.history) }, leadingIcon = { Icon(Icons.Outlined.History, null) },
                             onClick = { menu = false; history = true })
                     }
                     HorizontalDivider()
@@ -193,12 +196,12 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
             ) {
                 Icon(Icons.Outlined.Delete, null, tint = c.warnInk, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("这篇笔记在回收站中", color = c.warnInk, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                TextButton(onClick = { engine.updateNote(note.id, SyncEngine.NotePatch(trashed = false)) }) { Text("恢复", color = c.warnInk) }
+                Text(s.noteInTrash, color = c.warnInk, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = { engine.updateNote(note.id, SyncEngine.NotePatch(trashed = false)) }) { Text(s.restore, color = c.warnInk) }
                 TextButton(onClick = {
                     ui.selection = null
                     engine.deleteNote(note.id)
-                }) { Text("永久删除", color = c.danger) }
+                }) { Text(s.deleteForever, color = c.danger) }
             }
         }
 
@@ -209,7 +212,7 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
                 Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     NoteTagsRow(note, engine, editable = !note.isTrashed, onEdit = { tagging = true }, modifier = Modifier.weight(1f))
                     if (linkCount > 0) {
-                        Text("$linkCount 条反向链接", fontSize = 12.5.sp, color = c.ivy,
+                        Text(s.backlinksCount(linkCount), fontSize = 12.5.sp, color = c.ivy,
                             modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { backlinks = true }.padding(horizontal = 6.dp, vertical = 3.dp))
                     }
                 }
@@ -232,7 +235,7 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
     }
 
     if (renaming) {
-        TextInputDialog(title = "重命名笔记", initial = note.title, placeholder = "无标题", onDismiss = { renaming = false }) { t ->
+        TextInputDialog(title = s.renameNote, initial = note.title, placeholder = s.untitled, onDismiss = { renaming = false }) { t ->
             engine.updateNote(note.id, SyncEngine.NotePatch(title = cleanTitle(t)))
         }
     }
@@ -294,23 +297,24 @@ private fun EditorView(host: app.ivynote.android.editor.EditorHost, modifier: Mo
 @Composable
 private fun FormatBar(host: app.ivynote.android.editor.EditorHost, modifier: Modifier = Modifier, attach: (String) -> Unit) {
     val c = Ivy.colors
+    val s = LocalStrings.current
     val files: List<Triple<String, ImageVector, String>> = listOf(
-        Triple("photo", Icons.Outlined.Image, "图片"),
-        Triple("camera", Icons.Outlined.PhotoCamera, "拍照"),
-        Triple("file", Icons.Outlined.AttachFile, "附件"),
+        Triple("photo", Icons.Outlined.Image, s.formatPhoto),
+        Triple("camera", Icons.Outlined.PhotoCamera, s.formatCamera),
+        Triple("file", Icons.Outlined.AttachFile, s.formatAttachment),
     )
     val items: List<Triple<String, ImageVector, String>> = listOf(
-        Triple("h1", Icons.Outlined.Title, "标题"),
-        Triple("bold", Icons.Outlined.FormatBold, "加粗"),
-        Triple("italic", Icons.Outlined.FormatItalic, "斜体"),
-        Triple("task", Icons.Outlined.CheckBox, "待办"),
-        Triple("list", Icons.AutoMirrored.Filled.FormatListBulleted, "列表"),
-        Triple("ordered", Icons.Outlined.FormatListNumbered, "编号"),
-        Triple("quote", Icons.Outlined.FormatQuote, "引用"),
-        Triple("code", Icons.Outlined.Code, "代码"),
-        Triple("wiki", Icons.Outlined.AddLink, "双链"),
-        Triple("link", Icons.Outlined.Link, "链接"),
-        Triple("strike", Icons.Outlined.StrikethroughS, "删除线"),
+        Triple("h1", Icons.Outlined.Title, s.formatHeading),
+        Triple("bold", Icons.Outlined.FormatBold, s.formatBold),
+        Triple("italic", Icons.Outlined.FormatItalic, s.formatItalic),
+        Triple("task", Icons.Outlined.CheckBox, s.formatTask),
+        Triple("list", Icons.AutoMirrored.Filled.FormatListBulleted, s.formatList),
+        Triple("ordered", Icons.Outlined.FormatListNumbered, s.formatOrdered),
+        Triple("quote", Icons.Outlined.FormatQuote, s.formatQuote),
+        Triple("code", Icons.Outlined.Code, s.formatCode),
+        Triple("wiki", Icons.Outlined.AddLink, s.formatWikiLink),
+        Triple("link", Icons.Outlined.Link, s.formatLink),
+        Triple("strike", Icons.Outlined.StrikethroughS, s.formatStrike),
     )
     androidx.compose.material3.Surface(
         modifier = modifier.heightIn(min = 48.dp),
@@ -328,8 +332,8 @@ private fun FormatBar(host: app.ivynote.android.editor.EditorHost, modifier: Mod
                     IconButton(onClick = { host.command(cmd) }) { Icon(icon, contentDescription = label, tint = c.ink2) }
                 }
             }
-            IconButton(onClick = { host.command("undo") }) { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "撤销", tint = c.ink2) }
-            IconButton(onClick = { host.hideKeyboard() }) { Icon(Icons.Outlined.KeyboardHide, contentDescription = "收起键盘", tint = c.ink2) }
+            IconButton(onClick = { host.command("undo") }) { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = s.undo, tint = c.ink2) }
+            IconButton(onClick = { host.hideKeyboard() }) { Icon(Icons.Outlined.KeyboardHide, contentDescription = s.hideKeyboard, tint = c.ink2) }
         }
     }
 }
@@ -339,12 +343,13 @@ private fun FormatBar(host: app.ivynote.android.editor.EditorHost, modifier: Mod
 @Composable
 private fun OutlineSheet(body: String, topLine: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
     val c = Ivy.colors
+    val s = LocalStrings.current
     val headings = remember(body) { Outline.headings(body) }
     val current = Outline.current(headings, topLine)
     val top = headings.minOfOrNull { it.level } ?: 1
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false), containerColor = c.surface) {
         Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("大纲", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = c.ink)
+            Text(s.outline, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = c.ink)
             if (headings.isNotEmpty()) {
                 Spacer(Modifier.width(6.dp))
                 Text("${headings.size}", fontSize = 13.sp, color = c.faint)
@@ -352,8 +357,8 @@ private fun OutlineSheet(body: String, topLine: Int, onPick: (Int) -> Unit, onDi
         }
         if (headings.isEmpty()) {
             Column(Modifier.padding(24.dp)) {
-                Text("还没有标题", color = c.muted, fontWeight = FontWeight.Medium)
-                Text("以 # 开头的行会出现在这里。", color = c.faint, fontSize = 13.sp)
+                Text(s.noHeadings, color = c.muted, fontWeight = FontWeight.Medium)
+                Text(s.noHeadingsHint, color = c.faint, fontSize = 13.sp)
             }
         } else {
             HorizontalDivider(color = c.line, modifier = Modifier.padding(top = 8.dp))

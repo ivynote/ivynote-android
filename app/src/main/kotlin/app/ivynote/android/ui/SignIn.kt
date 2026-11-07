@@ -70,6 +70,7 @@ import app.ivynote.android.IvyApp
 import app.ivynote.android.platform.SqliteDocumentStore
 import app.ivynote.core.ApiClient
 import app.ivynote.core.ApiError
+import app.ivynote.core.L10n
 import app.ivynote.core.LibraryMigrator
 import app.ivynote.core.LibraryRef
 import app.ivynote.core.OfficialRegions
@@ -85,7 +86,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.Locale
 import java.util.TimeZone
 
 private enum class Mode { REGISTER, LOGIN }
@@ -102,11 +102,13 @@ private enum class Mode { REGISTER, LOGIN }
 @Composable
 fun CloudSignInScreen(promoting: LibraryRef?, onBack: () -> Unit) {
     val c = Ivy.colors
+    val s = LocalStrings.current
     val app = IvyApp.instance
     val catalog = app.catalog
     val scope = rememberCoroutineScope()
 
-    var server by remember { mutableStateOf(SyncRegion.preferred(Locale.getDefault().country, TimeZone.getDefault().id).server) }
+    // By the system's region, not the interface language (ours replaces the default locale).
+    var server by remember { mutableStateOf(SyncRegion.preferred(app.systemLocale.country, TimeZone.getDefault().id).server) }
     var info by remember { mutableStateOf<ServerInfo?>(null) }
     var probing by remember { mutableStateOf(false) }
     var probeError by remember { mutableStateOf<String?>(null) }
@@ -168,7 +170,7 @@ fun CloudSignInScreen(promoting: LibraryRef?, onBack: () -> Unit) {
 
     val libraryName = when {
         promoting != null -> promoting.name
-        region != null -> "我的笔记"
+        region != null -> s.defaultLibraryName
         else -> info?.siteName?.trim()?.takeIf { it.isNotEmpty() && it.lowercase() != "ivynote" } ?: server.host
     }
 
@@ -188,17 +190,17 @@ fun CloudSignInScreen(promoting: LibraryRef?, onBack: () -> Unit) {
             catalog.markMigrated(local.id, ref.id)
             if (result.rejected.isNotEmpty()) {
                 // Opened anyway; the local library keeps everything.
-                android.widget.Toast.makeText(app, "${result.rejected.size} 项未能迁移，原内容仍保留在本地笔记库中。", android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(app, L10n.s.migrationRejected(result.rejected.size), android.widget.Toast.LENGTH_LONG).show()
             }
             if (result.failedFiles.isNotEmpty()) {
-                android.widget.Toast.makeText(app, "${result.failedFiles.size} 个文件未能上传，原文件仍保留在本地笔记库中。", android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(app, L10n.s.migrationFilesFailed(result.failedFiles.size), android.widget.Toast.LENGTH_LONG).show()
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: LibraryMigrator.AccountNotEmpty) {
             migrationError = e.message
         } catch (e: Exception) {
-            migrationError = "迁移中断：${e.message}。账户已经创建，点「继续迁移」会从中断处继续，已上传的内容不会重复。"
+            migrationError = L10n.s.migrationInterrupted(e.message ?: e.javaClass.simpleName)
         } finally {
             migrating = false
         }
@@ -234,7 +236,7 @@ fun CloudSignInScreen(promoting: LibraryRef?, onBack: () -> Unit) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiError) {
-                error = if (e.status == 401 && !registering) "用户名或密码错误" else e.message
+                error = if (e.status == 401 && !registering) L10n.s.wrongCredentials else e.message
             } catch (e: Exception) {
                 error = e.message
             } finally {
@@ -245,13 +247,13 @@ fun CloudSignInScreen(promoting: LibraryRef?, onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize().background(c.canvas).systemBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = c.ink2) }
-            Text(if (promoting == null) "登录常青笔记" else "开启多端同步", style = SerifTitle, fontSize = 18.sp, color = c.ink)
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = s.back, tint = c.ink2) }
+            Text(if (promoting == null) s.signInTitle else s.turnOnSyncTitle, style = SerifTitle, fontSize = 18.sp, color = c.ink)
         }
         Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), contentAlignment = Alignment.TopCenter) {
             Column(Modifier.widthIn(max = 440.dp).fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 if (migrating || migrationError != null) {
-                    Caption("开启多端同步")
+                    Caption(s.turnOnSyncTitle)
                     FormCard {
                         if (migrating) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -263,20 +265,20 @@ fun CloudSignInScreen(promoting: LibraryRef?, onBack: () -> Unit) {
                             LinearProgressIndicator(progress = { progressShare(progress) }, modifier = Modifier.fillMaxWidth(), color = c.ivy, trackColor = c.sunken)
                         } else {
                             Text(migrationError ?: "", color = c.danger)
-                            TextButton(onClick = { promoting?.let { p -> scope.launch { migrate(p) } } }) { Text("继续迁移", color = c.ivy) }
+                            TextButton(onClick = { promoting?.let { p -> scope.launch { migrate(p) } } }) { Text(s.continueMigration, color = c.ivy) }
                         }
                     }
                     return@Column
                 }
 
                 // The sync node
-                Caption("同步节点")
+                Caption(s.syncNode)
                 Box {
                     FormCard(Modifier.clickable { serverMenu = true }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(if (region == null) Icons.Outlined.Dns else Icons.Outlined.Public, null, tint = c.ivy)
                             Spacer(Modifier.width(10.dp))
-                            Text(region?.let { "常青笔记 · ${it.title}" } ?: server.host, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            Text(region?.let { s.officialRegion(it.title) } ?: server.host, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                             when {
                                 probing -> CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = c.muted)
                                 info != null -> Icon(Icons.Outlined.CheckCircle, null, tint = c.ok, modifier = Modifier.size(18.dp))
@@ -289,31 +291,31 @@ fun CloudSignInScreen(promoting: LibraryRef?, onBack: () -> Unit) {
                     DropdownMenu(expanded = serverMenu, onDismissRequest = { serverMenu = false }) {
                         for (r in SyncRegion.entries) {
                             DropdownMenuItem(
-                                text = { Text("常青笔记 · ${r.title}") },
+                                text = { Text(s.officialRegion(r.title)) },
                                 leadingIcon = { if (region == r) Icon(Icons.Outlined.Check, null, tint = c.ivy) else Spacer(Modifier.size(24.dp)) },
                                 onClick = { serverMenu = false; server = r.server },
                             )
                         }
                         HorizontalDivider()
-                        DropdownMenuItem(text = { Text("自定义服务器…") }, leadingIcon = { Icon(Icons.Outlined.Dns, null) },
+                        DropdownMenuItem(text = { Text(s.customServerEllipsis) }, leadingIcon = { Icon(Icons.Outlined.Dns, null) },
                             onClick = { serverMenu = false; custom = true })
                     }
                 }
                 when {
                     probeError != null -> Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (region != null) "暂时无法连接这个节点" else probeError ?: "", color = c.danger, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { probeRun++ }) { Text("重试", color = c.ivy) }
+                        Text(if (region != null) s.nodeUnreachable else probeError ?: "", color = c.danger, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { probeRun++ }) { Text(s.retry, color = c.ivy) }
                     }
-                    promoting == null -> Caption("笔记先保存在本机，联网时自动同步到你的所有设备。")
-                    else -> Caption("注册一个新账户，「${promoting.name}」会上传到云端，之后在所有设备上同步。")
+                    promoting == null -> Caption(s.signInHint)
+                    else -> Caption(s.promoteHint(promoting.name))
                 }
 
                 if (promoting == null && canRegister) {
                     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                         SegmentedButton(selected = mode == Mode.REGISTER, onClick = { mode = Mode.REGISTER; error = null },
-                            shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("注册") }
+                            shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text(s.register) }
                         SegmentedButton(selected = mode == Mode.LOGIN, onClick = { mode = Mode.LOGIN; error = null },
-                            shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("登录") }
+                            shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text(s.login) }
                     }
                 }
 
@@ -328,19 +330,19 @@ fun CloudSignInScreen(promoting: LibraryRef?, onBack: () -> Unit) {
                 )
                 when {
                     error != null -> Text(error ?: "", color = c.danger, fontSize = 13.sp)
-                    info?.hasUsers == false && region == null -> Caption("这台服务器还没有账户。你创建的第一个账户将成为管理员。")
-                    promoting != null && info?.canRegister == false -> Text("这台服务器没有开放注册。", color = c.danger, fontSize = 13.sp)
+                    info?.hasUsers == false && region == null -> Caption(s.firstAdmin)
+                    promoting != null && info?.canRegister == false -> Text(s.registrationClosed, color = c.danger, fontSize = 13.sp)
                 }
                 val canSubmit = if (registering) canRegister && username.isNotEmpty() && password.isNotEmpty() else identity.isNotEmpty() && password.isNotEmpty()
                 InkButton(
-                    text = if (promoting != null) "注册并开启同步" else if (mode == Mode.LOGIN) "登录" else "注册",
+                    text = if (promoting != null) s.registerAndSync else if (mode == Mode.LOGIN) s.login else s.register,
                     onClick = ::submit,
                     enabled = canSubmit && !probing && info != null,
                     busy = busy,
                     modifier = Modifier.fillMaxWidth().height(44.dp),
                 )
                 if (promoting != null) {
-                    Caption("本地笔记库只能迁移到新注册的账户。已有账户的话，可以先登录，再在网页版或桌面端的「设置 → 导入」中导入本笔记库导出的内容。")
+                    Caption(s.promoteNote)
                 }
             }
         }
@@ -357,10 +359,10 @@ fun CloudSignInScreen(promoting: LibraryRef?, onBack: () -> Unit) {
 }
 
 private fun progressText(p: LibraryMigrator.Progress?): String = when (p?.phase) {
-    null, LibraryMigrator.Progress.Phase.CHECK -> "正在准备…"
-    LibraryMigrator.Progress.Phase.FILES -> "正在上传文件 ${p.done}/${p.total}"
-    LibraryMigrator.Progress.Phase.NOTES -> "正在上传笔记 ${p.done}/${p.total}"
-    LibraryMigrator.Progress.Phase.DONE -> "迁移完成，正在打开…"
+    null, LibraryMigrator.Progress.Phase.CHECK -> L10n.s.preparing
+    LibraryMigrator.Progress.Phase.FILES -> L10n.s.uploadingFiles(p.done, p.total)
+    LibraryMigrator.Progress.Phase.NOTES -> L10n.s.uploadingNotes(p.done, p.total)
+    LibraryMigrator.Progress.Phase.DONE -> L10n.s.migrationDone
 }
 
 private fun progressShare(p: LibraryMigrator.Progress?): Float = when (p?.phase) {
@@ -385,6 +387,7 @@ private fun CustomServerDialog(onDismiss: () -> Unit, onPick: (ServerAddress, Se
     var checking by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val parsed = ServerAddress.parseOrNull(address)
+    val s = LocalStrings.current
 
     fun connect() {
         if (checking) return
@@ -411,7 +414,7 @@ private fun CustomServerDialog(onDismiss: () -> Unit, onPick: (ServerAddress, Se
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("自定义服务器") },
+        title = { Text(s.customServer) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -425,17 +428,17 @@ private fun CustomServerDialog(onDismiss: () -> Unit, onPick: (ServerAddress, Se
                 )
                 when {
                     error != null -> Text(error ?: "", color = c.danger, fontSize = 13.sp)
-                    parsed?.isInsecure == true -> Text("使用 http 连接时，密码和笔记以明文传输，请只在可信的局域网内使用。", color = c.warn, fontSize = 13.sp)
-                    else -> Text("连接你自己或团队部署的常青笔记服务器。", color = c.muted, fontSize = 13.sp)
+                    parsed?.isInsecure == true -> Text(s.insecureWarning, color = c.warn, fontSize = 13.sp)
+                    else -> Text(s.customServerHint, color = c.muted, fontSize = 13.sp)
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = ::connect, enabled = address.isNotBlank() && !checking) {
-                if (checking) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Text("使用这个服务器")
+                if (checking) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Text(s.useServer)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } },
     )
 }
 
@@ -443,6 +446,7 @@ private fun CustomServerDialog(onDismiss: () -> Unit, onPick: (ServerAddress, Se
 @Composable
 fun SignInScreen(ref: LibraryRef, session: SessionStore) {
     val c = Ivy.colors
+    val s = LocalStrings.current
     val catalog = IvyApp.instance.catalog
     val notice by session.notice.collectAsState()
     val scope = rememberCoroutineScope()
@@ -491,7 +495,7 @@ fun SignInScreen(ref: LibraryRef, session: SessionStore) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiError) {
-                error = if (e.status == 401 && mode == Mode.LOGIN) "用户名或密码错误" else e.message
+                error = if (e.status == 401 && mode == Mode.LOGIN) L10n.s.wrongCredentials else e.message
             } catch (e: Exception) {
                 error = e.message
             } finally {
@@ -502,7 +506,7 @@ fun SignInScreen(ref: LibraryRef, session: SessionStore) {
 
     Column(Modifier.fillMaxSize().background(c.canvas).systemBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { catalog.open(null) }) { Icon(Icons.Outlined.Book, contentDescription = "笔记库", tint = c.ink2) }
+            IconButton(onClick = { catalog.open(null) }) { Icon(Icons.Outlined.Book, contentDescription = s.libraries, tint = c.ink2) }
             Text(ref.name, style = SerifTitle, fontSize = 18.sp, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), contentAlignment = Alignment.TopCenter) {
@@ -512,8 +516,8 @@ fun SignInScreen(ref: LibraryRef, session: SessionStore) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 IvyLeaf(68.dp)
-                Text(info?.siteName?.takeIf { it.isNotBlank() } ?: "常青笔记", style = SerifTitle, fontSize = 26.sp, color = c.ink)
-                Text("本地优先的 Markdown 笔记", color = c.muted, fontSize = 14.sp)
+                Text(info?.siteName?.takeIf { it.isNotBlank() } ?: s.appName, style = SerifTitle, fontSize = 26.sp, color = c.ink)
+                Text(s.slogan, color = c.muted, fontSize = 14.sp)
                 notice?.takeIf { mode == Mode.LOGIN }?.let {
                     Surface(color = c.warnSoft, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                         Text(it, color = c.warnInk, fontSize = 14.sp, modifier = Modifier.padding(12.dp))
@@ -522,9 +526,9 @@ fun SignInScreen(ref: LibraryRef, session: SessionStore) {
                 val current = info
                 if (current == null) {
                     if (probeError != null) {
-                        Text("无法连接服务器", fontWeight = FontWeight.SemiBold, color = c.ink)
+                        Text(s.cannotConnect, fontWeight = FontWeight.SemiBold, color = c.ink)
                         Text(probeError ?: "", color = c.muted, fontSize = 13.sp, textAlign = TextAlign.Center)
-                        InkButton("重试", onClick = { probeRun++ })
+                        InkButton(s.retry, onClick = { probeRun++ })
                     } else {
                         CircularProgressIndicator(color = c.muted)
                     }
@@ -533,9 +537,9 @@ fun SignInScreen(ref: LibraryRef, session: SessionStore) {
                 if (current.canRegister && current.hasUsers) {
                     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                         SegmentedButton(selected = mode == Mode.LOGIN, onClick = { mode = Mode.LOGIN; error = null },
-                            shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("登录") }
+                            shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text(s.login) }
                         SegmentedButton(selected = mode == Mode.REGISTER, onClick = { mode = Mode.REGISTER; error = null },
-                            shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("注册") }
+                            shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text(s.register) }
                     }
                 }
                 AccountFields(
@@ -549,11 +553,11 @@ fun SignInScreen(ref: LibraryRef, session: SessionStore) {
                 )
                 when {
                     error != null -> Text(error ?: "", color = c.danger, fontSize = 13.sp)
-                    !current.hasUsers -> Caption("这台服务器还没有账户。你创建的第一个账户将成为管理员。")
-                    server.isInsecure -> Text("使用 http 连接，密码和笔记以明文传输。", color = c.warn, fontSize = 13.sp)
+                    !current.hasUsers -> Caption(s.firstAdmin)
+                    server.isInsecure -> Text(s.httpWarning, color = c.warn, fontSize = 13.sp)
                 }
                 val canSubmit = if (mode == Mode.LOGIN) identity.isNotEmpty() && password.isNotEmpty() else username.isNotEmpty() && password.isNotEmpty()
-                InkButton(if (mode == Mode.LOGIN) "登录" else "创建账户", onClick = ::submit, enabled = canSubmit, busy = busy,
+                InkButton(if (mode == Mode.LOGIN) s.login else s.createAccount, onClick = ::submit, enabled = canSubmit, busy = busy,
                     modifier = Modifier.fillMaxWidth().height(44.dp))
                 Text(server.toString(), color = c.faint, fontSize = 12.sp)
             }
@@ -571,24 +575,25 @@ private fun AccountFields(
     password: String, onPassword: (String) -> Unit,
     onSubmit: () -> Unit,
 ) {
+    val s = LocalStrings.current
     val plain = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Next)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (login) {
-            OutlinedTextField(identity, onIdentity, label = { Text("用户名或邮箱") }, singleLine = true, keyboardOptions = plain,
+            OutlinedTextField(identity, onIdentity, label = { Text(s.usernameOrEmail) }, singleLine = true, keyboardOptions = plain,
                 modifier = Modifier.fillMaxWidth())
         } else {
-            OutlinedTextField(username, onUsername, label = { Text("用户名") }, singleLine = true, keyboardOptions = plain,
+            OutlinedTextField(username, onUsername, label = { Text(s.username) }, singleLine = true, keyboardOptions = plain,
                 modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(email, onEmail, label = { Text("邮箱（可选）") }, singleLine = true,
+            OutlinedTextField(email, onEmail, label = { Text(s.emailOptional) }, singleLine = true,
                 keyboardOptions = plain.copy(keyboardType = KeyboardType.Email), modifier = Modifier.fillMaxWidth())
             if (displayName != null) {
-                OutlinedTextField(displayName, onDisplayName, label = { Text("显示名（可选）") }, singleLine = true,
+                OutlinedTextField(displayName, onDisplayName, label = { Text(s.displayNameOptional) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth())
             }
         }
         OutlinedTextField(
             password, onPassword,
-            label = { Text(if (login) "密码" else "密码（至少 8 位）") },
+            label = { Text(if (login) s.password else s.passwordMin8) },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done, autoCorrectEnabled = false),

@@ -42,6 +42,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.PhotoLibrary
@@ -117,8 +118,10 @@ fun ShelfPane(ui: LibraryUiState, session: SessionStore?, wide: Boolean, modifie
     var movingNote by remember { mutableStateOf<Note?>(null) }
     var confirmEmpty by remember { mutableStateOf(false) }
     var editingTag by remember { mutableStateOf<app.ivynote.core.Tag?>(null) }
+    val s = LocalStrings.current
 
-    val rows = remember(revision, ui.expanded, sortBy, limits.toMap()) {
+    // The labels (置顶, 笔记, 回收站…) are in the interface language.
+    val rows = remember(revision, ui.expanded, sortBy, limits.toMap(), s) {
         Shelf.build(engine.folders.values, engine.notes.values, engine.tags.values, ui.expanded, sortBy, limits)
     }
     val actions = ShelfActions(
@@ -168,11 +171,11 @@ fun ShelfPane(ui: LibraryUiState, session: SessionStore?, wide: Boolean, modifie
             contentColor = Ivy.colors.canvas,
             shape = CircleShape,
             modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(20.dp),
-        ) { Icon(Icons.Outlined.Edit, contentDescription = "新建笔记") }
+        ) { Icon(Icons.Outlined.Edit, contentDescription = s.newNote) }
     }
 
     newFolderParent?.let { parent ->
-        TextInputDialog(title = if (parent.isEmpty()) "新建笔记本" else "新建子笔记本", confirm = "创建", onDismiss = { newFolderParent = null }) { name ->
+        TextInputDialog(title = if (parent.isEmpty()) s.newFolder else s.newSubfolder, confirm = s.create, onDismiss = { newFolderParent = null }) { name ->
             val n = name.trim().take(100)
             if (n.isNotEmpty()) {
                 engine.createFolder(n, parent)
@@ -181,18 +184,18 @@ fun ShelfPane(ui: LibraryUiState, session: SessionStore?, wide: Boolean, modifie
         }
     }
     renamingFolder?.let { f ->
-        TextInputDialog(title = "重命名笔记本", initial = f.name, onDismiss = { renamingFolder = null }) { name ->
+        TextInputDialog(title = s.renameFolder, initial = f.name, onDismiss = { renamingFolder = null }) { name ->
             val n = name.trim().take(100)
             if (n.isNotEmpty()) engine.renameFolder(f.id, n)
         }
     }
     deletingFolder?.let { f ->
-        ConfirmDialog("删除笔记本？", "「${f.name}」的子笔记本会一起删除，其中的笔记移到回收站。", "删除", onDismiss = { deletingFolder = null }) {
+        ConfirmDialog(s.deleteFolderTitle, s.deleteFolderMessage(f.name), s.delete, onDismiss = { deletingFolder = null }) {
             engine.deleteFolder(f.id)
         }
     }
     renamingNote?.let { n ->
-        TextInputDialog(title = "重命名笔记", initial = n.title, placeholder = "无标题", onDismiss = { renamingNote = null }) { title ->
+        TextInputDialog(title = s.renameNote, initial = n.title, placeholder = s.untitled, onDismiss = { renamingNote = null }) { title ->
             engine.updateNote(n.id, SyncEngine.NotePatch(title = cleanTitle(title)))
         }
     }
@@ -201,7 +204,7 @@ fun ShelfPane(ui: LibraryUiState, session: SessionStore?, wide: Boolean, modifie
     }
     editingTag?.let { t -> TagEditDialog(engine, t, onDismiss = { editingTag = null }) }
     if (confirmEmpty) {
-        ConfirmDialog("清空回收站？", "回收站中的全部笔记将被永久删除，此操作无法撤销。", "清空回收站", onDismiss = { confirmEmpty = false }) {
+        ConfirmDialog(s.emptyTrashTitle, s.emptyTrashMessage, s.emptyTrash, onDismiss = { confirmEmpty = false }) {
             if (ui.selectedNote?.let { engine.notes[it]?.isTrashed } == true) ui.selection = null
             engine.emptyTrash()
         }
@@ -234,6 +237,9 @@ private fun LibraryHeader(ui: LibraryUiState, session: SessionStore?, state: app
     val libraries by catalog.libraries.collectAsState()
     val ref = ui.lib.ref
     var open by remember { mutableStateOf(false) }
+    var choosingLanguage by remember { mutableStateOf(false) }
+    val s = LocalStrings.current
+    if (choosingLanguage) LanguageDialog(onDismiss = { choosingLanguage = false })
     var about by remember { mutableStateOf(false) }
     if (about) AboutSheet(onDismiss = { about = false })
     Box(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
@@ -247,10 +253,10 @@ private fun LibraryHeader(ui: LibraryUiState, session: SessionStore?, state: app
                 Text(ref.name, style = SerifTitle, fontSize = 19.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Ivy.colors.ink)
                 SyncStatusLine(ui.lib.engine, state)
             }
-            Icon(Icons.Outlined.UnfoldMore, contentDescription = "切换笔记库", tint = Ivy.colors.faint, modifier = Modifier.size(18.dp))
+            Icon(Icons.Outlined.UnfoldMore, contentDescription = s.switchLibrary, tint = Ivy.colors.faint, modifier = Modifier.size(18.dp))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            Caption("笔记库", Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            Caption(s.libraries, Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             for (l in libraries) {
                 DropdownMenuItem(
                     text = { Text(l.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -263,17 +269,19 @@ private fun LibraryHeader(ui: LibraryUiState, session: SessionStore?, state: app
             }
             HorizontalDivider()
             if (!ref.isLocal && session != null) {
-                DropdownMenuItem(text = { Text("账户与同步…") }, leadingIcon = { Icon(Icons.Outlined.ManageAccounts, null) },
+                DropdownMenuItem(text = { Text(s.accountAndSync) }, leadingIcon = { Icon(Icons.Outlined.ManageAccounts, null) },
                     onClick = { open = false; ui.showAccount = true })
             } else if (catalog.library(ref.id)?.canTurnOnSync == true) {
-                DropdownMenuItem(text = { Text("开启多端同步…") }, leadingIcon = { Icon(Icons.Outlined.CloudUpload, null) },
+                DropdownMenuItem(text = { Text(s.turnOnSyncEllipsis) }, leadingIcon = { Icon(Icons.Outlined.CloudUpload, null) },
                     onClick = { open = false; catalog.turnOnSync(ref.id) })
             }
-            DropdownMenuItem(text = { Text("媒体库") }, leadingIcon = { Icon(Icons.Outlined.PhotoLibrary, null) },
+            DropdownMenuItem(text = { Text(s.mediaLibrary) }, leadingIcon = { Icon(Icons.Outlined.PhotoLibrary, null) },
                 onClick = { open = false; ui.showMedia = true })
-            DropdownMenuItem(text = { Text("管理笔记库…") }, leadingIcon = { Icon(Icons.Outlined.Book, null) },
+            DropdownMenuItem(text = { Text(s.language) }, leadingIcon = { Icon(Icons.Outlined.Language, null) },
+                onClick = { open = false; choosingLanguage = true })
+            DropdownMenuItem(text = { Text(s.manageLibraries) }, leadingIcon = { Icon(Icons.Outlined.Book, null) },
                 onClick = { open = false; catalog.open(null) })
-            DropdownMenuItem(text = { Text("关于与检查更新…") }, leadingIcon = { Icon(Icons.Outlined.Info, null) },
+            DropdownMenuItem(text = { Text(s.aboutAndUpdates) }, leadingIcon = { Icon(Icons.Outlined.Info, null) },
                 onClick = { open = false; about = true })
         }
     }
@@ -290,7 +298,7 @@ private fun SearchField(query: String, onChange: (String) -> Unit) {
         Icon(Icons.Outlined.Search, contentDescription = null, tint = c.faint, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Box(Modifier.weight(1f)) {
-            if (query.isEmpty()) Text("搜索笔记", color = c.faint, fontSize = 15.sp)
+            if (query.isEmpty()) Text(LocalStrings.current.searchNotes, color = c.faint, fontSize = 15.sp)
             BasicTextField(
                 value = query,
                 onValueChange = onChange,
@@ -301,7 +309,7 @@ private fun SearchField(query: String, onChange: (String) -> Unit) {
             )
         }
         if (query.isNotEmpty()) {
-            Icon(Icons.Outlined.Close, contentDescription = "清除", tint = c.faint,
+            Icon(Icons.Outlined.Close, contentDescription = LocalStrings.current.clear, tint = c.faint,
                 modifier = Modifier.size(18.dp).clip(CircleShape).clickable { onChange("") })
         }
     }
@@ -367,7 +375,7 @@ private fun RowContent(row: Shelf.Row, engine: SyncEngine, onHeadingMenu: () -> 
         }
         Shelf.Kind.HEADING -> Row(Modifier.fillMaxWidth().padding(start = 8.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(row.label, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = c.muted, modifier = Modifier.weight(1f))
-            IconButton(onClick = onHeadingMenu) { Icon(Icons.Outlined.MoreHoriz, contentDescription = "排序与新建", tint = c.muted) }
+            IconButton(onClick = onHeadingMenu) { Icon(Icons.Outlined.MoreHoriz, contentDescription = LocalStrings.current.sortAndNew, tint = c.muted) }
         }
         Shelf.Kind.CREATE -> Row(Modifier.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.Add, null, tint = c.muted, modifier = Modifier.size(20.dp))
@@ -375,7 +383,7 @@ private fun RowContent(row: Shelf.Row, engine: SyncEngine, onHeadingMenu: () -> 
             Text(row.label, color = c.muted, fontSize = 15.sp)
         }
         Shelf.Kind.MORE -> Row(Modifier.padding(start = indent(row.depth) + 30.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("再显示 ${minOf(row.count, Shelf.PAGE)} 篇（共 ${row.count} 篇未显示）", color = c.ivy, fontSize = 13.5.sp)
+            Text(LocalStrings.current.showMore(minOf(row.count, Shelf.PAGE), row.count), color = c.ivy, fontSize = 13.5.sp)
         }
         else -> Row(Modifier.fillMaxWidth().padding(start = 4.dp + indent(row.depth), end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(20.dp), contentAlignment = Alignment.Center) {
@@ -391,7 +399,7 @@ private fun RowContent(row: Shelf.Row, engine: SyncEngine, onHeadingMenu: () -> 
             val untitled = row.kind == Shelf.Kind.NOTE && row.label.isBlank()
             Text(
                 when {
-                    untitled -> "无标题"
+                    untitled -> LocalStrings.current.untitled
                     row.kind == Shelf.Kind.TAG -> "#" + row.label
                     else -> row.label
                 },
@@ -408,7 +416,7 @@ private fun RowContent(row: Shelf.Row, engine: SyncEngine, onHeadingMenu: () -> 
             }
             if (note != null && note.pinned && !note.isTrashed && row.parent != Shelf.PINNED_KEY) {
                 Spacer(Modifier.width(6.dp))
-                Icon(Icons.Filled.PushPin, contentDescription = "置顶", tint = c.warn, modifier = Modifier.size(13.dp))
+                Icon(Icons.Filled.PushPin, contentDescription = LocalStrings.current.pinned, tint = c.warn, modifier = Modifier.size(13.dp))
             }
             if (row.count > 0) {
                 Spacer(Modifier.width(6.dp))
@@ -424,7 +432,7 @@ private fun indent(depth: Int) = (minOf(depth, 4) * 16 + maxOf(depth - 4, 0) * 8
 @Composable
 private fun Chevron(open: Boolean, modifier: Modifier = Modifier) {
     val angle by animateFloatAsState(if (open) 90f else 0f, label = "chevron")
-    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = if (open) "收起" else "展开",
+    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = if (open) LocalStrings.current.collapse else LocalStrings.current.expand,
         tint = Ivy.colors.faint, modifier = modifier.size(18.dp).rotate(angle))
 }
 
@@ -459,30 +467,32 @@ private fun RowMenu(
     }
     when (row.kind) {
         Shelf.Kind.HEADING -> {
-            Caption("排序", Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-            for (s in Shelf.SortBy.entries) {
+            val s = LocalStrings.current
+            Caption(s.sort, Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            for (option in Shelf.SortBy.entries) {
                 DropdownMenuItem(
-                    text = { Text(s.label) },
-                    leadingIcon = { if (s == sortBy) Icon(Icons.Outlined.Check, null, tint = Ivy.colors.ivy) else Spacer(Modifier.size(24.dp)) },
-                    onClick = { close(); onSort(s) },
+                    text = { Text(option.label) },
+                    leadingIcon = { if (option == sortBy) Icon(Icons.Outlined.Check, null, tint = Ivy.colors.ivy) else Spacer(Modifier.size(24.dp)) },
+                    onClick = { close(); onSort(option) },
                 )
             }
             HorizontalDivider()
-            item("新建笔记", Icons.Outlined.Edit) { actions.newNote("") }()
-            item("新建笔记本", Icons.Outlined.CreateNewFolder) { actions.newFolder("") }()
+            item(s.newNote, Icons.Outlined.Edit) { actions.newNote("") }()
+            item(s.newFolder, Icons.Outlined.CreateNewFolder) { actions.newFolder("") }()
         }
         Shelf.Kind.FOLDER -> row.folder?.let { f ->
-            item("新建笔记", Icons.Outlined.Edit) { actions.newNote(f.id) }()
-            item("新建子笔记本", Icons.Outlined.CreateNewFolder) { actions.newFolder(f.id) }()
-            item("重命名", Icons.Outlined.Edit) { actions.renameFolder(f) }()
-            item("删除", Icons.Outlined.Delete, danger = true) { actions.deleteFolder(f) }()
+            val s = LocalStrings.current
+            item(s.newNote, Icons.Outlined.Edit) { actions.newNote(f.id) }()
+            item(s.newSubfolder, Icons.Outlined.CreateNewFolder) { actions.newFolder(f.id) }()
+            item(s.rename, Icons.Outlined.Edit) { actions.renameFolder(f) }()
+            item(s.delete, Icons.Outlined.Delete, danger = true) { actions.deleteFolder(f) }()
         }
         Shelf.Kind.NOTE -> row.note?.let { n -> NoteMenuItems(n, ui, engine, actions, close) }
         Shelf.Kind.TAG -> row.tag?.let { t ->
-            item("编辑标签…", Icons.Outlined.Edit) { actions.editTag(t) }()
+            item(LocalStrings.current.editTagEllipsis, Icons.Outlined.Edit) { actions.editTag(t) }()
         }
         Shelf.Kind.GROUP -> if (row.key == Shelf.TRASH_KEY) {
-            item("清空回收站", Icons.Outlined.DeleteForever, danger = true) { actions.emptyTrash() }()
+            item(LocalStrings.current.emptyTrash, Icons.Outlined.DeleteForever, danger = true) { actions.emptyTrash() }()
         }
         else -> Unit
     }
@@ -492,26 +502,27 @@ private fun RowMenu(
 @Composable
 fun NoteMenuItems(n: Note, ui: LibraryUiState, engine: SyncEngine, actions: ShelfActions?, close: () -> Unit) {
     val c = Ivy.colors
+    val s = LocalStrings.current
     fun clearIfSelected() {
         if (ui.selectedNote == n.id) ui.selection = null
     }
     if (n.isTrashed) {
-        DropdownMenuItem(text = { Text("恢复") }, leadingIcon = { Icon(Icons.Outlined.Restore, null) },
+        DropdownMenuItem(text = { Text(s.restore) }, leadingIcon = { Icon(Icons.Outlined.Restore, null) },
             onClick = { close(); engine.updateNote(n.id, SyncEngine.NotePatch(trashed = false)) })
-        DropdownMenuItem(text = { Text("永久删除", color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.DeleteForever, null, tint = c.danger) },
+        DropdownMenuItem(text = { Text(s.deleteForever, color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.DeleteForever, null, tint = c.danger) },
             onClick = { close(); clearIfSelected(); engine.deleteNote(n.id) })
     } else {
-        DropdownMenuItem(text = { Text(if (n.pinned) "取消置顶" else "置顶") }, leadingIcon = { Icon(Icons.Outlined.PushPin, null) },
+        DropdownMenuItem(text = { Text(if (n.pinned) s.unpin else s.pin) }, leadingIcon = { Icon(Icons.Outlined.PushPin, null) },
             onClick = { close(); engine.updateNote(n.id, SyncEngine.NotePatch(pinned = !n.pinned)) })
         if (actions != null) {
-            DropdownMenuItem(text = { Text("重命名") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+            DropdownMenuItem(text = { Text(s.rename) }, leadingIcon = { Icon(Icons.Outlined.Edit, null) },
                 onClick = { close(); actions.renameNote(n) })
-            DropdownMenuItem(text = { Text("移动到…") }, leadingIcon = { Icon(Icons.Outlined.Folder, null) },
+            DropdownMenuItem(text = { Text(s.moveToEllipsis) }, leadingIcon = { Icon(Icons.Outlined.Folder, null) },
                 onClick = { close(); actions.moveNote(n) })
         }
-        DropdownMenuItem(text = { Text("复制笔记") }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) },
+        DropdownMenuItem(text = { Text(s.duplicateNote) }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) },
             onClick = { close(); engine.duplicateNote(n.id)?.let { ui.reveal(it.id) } })
-        DropdownMenuItem(text = { Text("移到回收站", color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = c.danger) },
+        DropdownMenuItem(text = { Text(s.moveToTrash, color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = c.danger) },
             onClick = { close(); clearIfSelected(); engine.updateNote(n.id, SyncEngine.NotePatch(trashed = true)) })
     }
 }
@@ -522,13 +533,14 @@ fun MoveDialog(engine: SyncEngine, note: Note, onDismiss: () -> Unit) {
     val c = Ivy.colors
     val revision by engine.revision.collectAsState()
     val folders = remember(revision) { Shelf.flatFolders(engine.folders.values) }
+    val s = LocalStrings.current
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("移动到") },
+        title = { Text(s.moveTo) },
         text = {
             LazyColumn(Modifier.heightIn(max = 420.dp)) {
                 item {
-                    FolderOption("无笔记本", 0, note.folderId.isEmpty() || engine.folders[note.folderId] == null) {
+                    FolderOption(s.noNotebook, 0, note.folderId.isEmpty() || engine.folders[note.folderId] == null) {
                         engine.updateNote(note.id, SyncEngine.NotePatch(folderId = "")); onDismiss()
                     }
                 }
@@ -539,7 +551,7 @@ fun MoveDialog(engine: SyncEngine, note: Note, onDismiss: () -> Unit) {
                 }
             }
         },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("取消", color = c.ink2) } },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text(s.cancel, color = c.ink2) } },
     )
 }
 
@@ -566,7 +578,7 @@ private fun SearchResults(engine: SyncEngine, revision: Long, query: String, onO
     val hits = remember(revision, query) { Search.run(engine.notes.values, query) }
     if (hits.isEmpty()) {
         Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("没有找到「${query.trim()}」", color = c.muted)
+            Text(LocalStrings.current.noResults(query.trim()), color = c.muted)
         }
         return
     }

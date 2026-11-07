@@ -82,7 +82,7 @@ class LibraryCatalog(
     // Changes
 
     fun createLocal(name: String): LibraryRef =
-        add(LibraryRef(id = newId(), kind = LibraryRef.Kind.LOCAL, name = clean(name, "我的笔记"), createdAt = now(), openedAt = now()))
+        add(LibraryRef(id = newId(), kind = LibraryRef.Kind.LOCAL, name = clean(name, L10n.s.defaultLibraryName), createdAt = now(), openedAt = now()))
 
     fun createServer(server: ServerAddress, name: String): LibraryRef =
         add(LibraryRef(id = newId(), kind = LibraryRef.Kind.SERVER, name = clean(name, server.host), server = server, createdAt = now(), openedAt = now()))

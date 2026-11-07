@@ -551,7 +551,7 @@ class SyncEngine(
     /** A copy next to the original, titled `<title> 副本` (guide 3.2). */
     fun duplicateNote(id: String): Note? {
         val n = _notes[id] ?: return null
-        val title = (n.title.ifBlank { "无标题" } + " 副本").take(300)
+        val title = (n.title.ifBlank { L10n.s.untitled } + L10n.s.duplicateSuffix).take(300)
         return createNote(title = title, body = n.body, folderId = n.folderId, tags = n.tags)
     }
 
@@ -787,7 +787,7 @@ class SyncEngine(
             } catch (e: ApiError.Server) {
                 if (!refused(e.code)) throw e
                 // One bad file must not hold back everything else.
-                val msg = if (e.code == 413) "文件超过服务器的上传上限" else e.message ?: "rejected"
+                val msg = if (e.code == 413) L10n.s.fileTooLarge else e.message ?: "rejected"
                 _uploads[up.id] = up.copy(failed = msg)
                 _uploadFailure.value = UploadFailure(up.name, msg)
                 updateCounts()

@@ -54,7 +54,9 @@ class LibraryMigrator(
         val failedFiles: List<String> = emptyList(),
     )
 
-    class AccountNotEmpty : Exception("这个账户里已经有笔记。本地笔记库只能迁移到新注册的空账户。")
+    class AccountNotEmpty : Exception() {
+        override val message: String get() = L10n.s.accountNotEmpty
+    }
 
     suspend fun run(content: Content, progress: suspend (Progress) -> Unit = {}): Result {
         val folders = parentsFirst(content.folders.filter { !it.deleted })

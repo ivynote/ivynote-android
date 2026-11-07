@@ -8,9 +8,20 @@ package app.ivynote.core
  */
 class MediaLibrary(private val engine: SyncEngine, private val api: ApiClient?) {
 
-    enum class Filter(val label: String, val kind: String = "") {
-        ALL("全部"), IMAGE("图片", "image"), VIDEO("视频", "video"), AUDIO("音频", "audio"),
-        FILE("文件", "file"), ORPHANED("未引用"), TRASH("回收站"),
+    enum class Filter(val kind: String = "") {
+        ALL, IMAGE("image"), VIDEO("video"), AUDIO("audio"), FILE("file"), ORPHANED, TRASH;
+
+        val label: String get() = with(L10n.s) {
+            when (this@Filter) {
+                ALL -> filterAll
+                IMAGE -> filterImages
+                VIDEO -> filterVideo
+                AUDIO -> filterAudio
+                FILE -> filterFiles
+                ORPHANED -> unreferenced
+                TRASH -> trash
+            }
+        }
     }
 
     data class Listing(
@@ -77,7 +88,7 @@ class MediaLibrary(private val engine: SyncEngine, private val api: ApiClient?) 
                 if (!e.isTransient) throw e
             }
         }
-        val a = engine.attachments[id] ?: throw ApiError.Server(404, "文件不存在")
+        val a = engine.attachments[id] ?: throw ApiError.Server(404, L10n.s.fileNotFound)
         val ids = engine.attachmentRefs()[id].orEmpty()
         val notes = ids.mapNotNull { engine.notes[it] }.map { NoteRef(it.id, it.title, it.folderId) }
         return AttachmentDetail(a.copy(refs = notes.size), notes)
@@ -85,7 +96,7 @@ class MediaLibrary(private val engine: SyncEngine, private val api: ApiClient?) 
 
     suspend fun rename(id: String, name: String): Attachment {
         val clean = name.trim().replace('\n', ' ')
-        if (clean.isEmpty()) throw ApiError.Server(400, "名称不能为空")
+        if (clean.isEmpty()) throw ApiError.Server(400, L10n.s.nameEmpty)
         return change(id, { it.renameAttachment(id, clean) }) { it.copy(name = clean) }
     }
 
@@ -103,14 +114,14 @@ class MediaLibrary(private val engine: SyncEngine, private val api: ApiClient?) 
 
     /** The public address, made on first use (guide 8.3: no longer behind sign-in). */
     suspend fun publish(id: String): String {
-        val api = api ?: throw ApiError.Server(400, "本地笔记库没有公网链接")
+        val api = api ?: throw ApiError.Server(400, L10n.s.localNoPublicLink)
         val url = api.publishAttachment(id)
         engine.attachments[id]?.let { engine.putAttachment(it.copy(public = true)) }
         return url
     }
 
     suspend fun unpublish(id: String): Attachment {
-        val api = api ?: throw ApiError.Server(400, "本地笔记库没有公网链接")
+        val api = api ?: throw ApiError.Server(400, L10n.s.localNoPublicLink)
         return api.unpublishAttachment(id).also { engine.putAttachment(it) }
     }
 
@@ -118,7 +129,7 @@ class MediaLibrary(private val engine: SyncEngine, private val api: ApiClient?) 
         val updated = if (api != null) {
             remote(api)
         } else {
-            val a = engine.attachments[id] ?: throw ApiError.Server(404, "文件不存在")
+            val a = engine.attachments[id] ?: throw ApiError.Server(404, L10n.s.fileNotFound)
             local(a).copy(updatedAt = nowMillis())
         }
         engine.putAttachment(updated)
