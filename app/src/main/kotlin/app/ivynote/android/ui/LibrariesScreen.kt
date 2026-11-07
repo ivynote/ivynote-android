@@ -178,7 +178,7 @@ fun LibrariesScreen() {
                     TextButton(onClick = { about = true }) {
                         val newer = update.info?.takeIf { it.available }?.latest
                         Text(
-                            if (newer != null) "关于常青笔记 · 有新版本 $newer" else "关于常青笔记 · ${IvyApp.instance.updater.current}",
+                            if (newer != null) s.aboutNewer(newer) else s.aboutVersion(IvyApp.instance.updater.current),
                             color = if (newer != null) c.ivy else c.muted, fontSize = 13.sp,
                         )
                     }

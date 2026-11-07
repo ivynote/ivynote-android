@@ -335,6 +335,50 @@ interface Strings {
     val password: String
     val passwordMin8: String
 
+    // Updates
+    fun aboutNewer(newer: String): String
+    fun aboutVersion(version: String): String
+    val aboutAndUpdates: String
+    val updateAvailable: String
+    fun versionReleased(version: String): String
+    fun currentVersionIs(version: String): String
+    fun downloading(progress: String): String
+    val savingAndInstalling: String
+    val updateReady: String
+    val debugUpdateHint: String
+    val webUpdateHint: String
+    val updateHint: String
+    fun downloadFailed(error: String): String
+    fun installFailed(error: String): String
+    val downloadInBackground: String
+    val installing: String
+    val installNow: String
+    val downloadFromWebsite: String
+    val updateNow: String
+    val cancelDownload: String
+    val websiteDownload: String
+    val skipVersion: String
+    val later: String
+    val aboutTagline: String
+    val version: String
+    val checkForUpdates: String
+    val checking: String
+    fun downloadingVersion(version: String): String
+    fun newVersion(version: String): String
+    val checkFailed: String
+    val upToDate: String
+    val anonymousStats: String
+    val anonymousStatsHint: String
+    val website: String
+    fun upToDateVersion(version: String): String
+    fun checkUpdateFailed(error: String): String
+    val allowInstall: String
+    val apkInvalid: String
+    val signatureMismatch: String
+    val noStorage: String
+    val installBlocked: String
+    val installIncomplete: String
+
     // Errors and checks (core)
     fun unreachable(detail: String): String
     val notIvynote: String
@@ -672,6 +716,50 @@ object ZhStrings : Strings {
     override val displayNameOptional = "显示名（可选）"
     override val password = "密码"
     override val passwordMin8 = "密码（至少 8 位）"
+
+    // Updates
+    override fun aboutNewer(newer: String) = "关于常青笔记 · 有新版本 $newer"
+    override fun aboutVersion(version: String) = "关于常青笔记 · $version"
+    override val aboutAndUpdates = "关于与检查更新…"
+    override val updateAvailable = "发现新版本"
+    override fun versionReleased(version: String) = "常青笔记 $version 已发布"
+    override fun currentVersionIs(version: String) = "当前版本 $version"
+    override fun downloading(progress: String) = "正在下载… $progress"
+    override val savingAndInstalling = "正在保存笔记并打开安装程序…"
+    override val updateReady = "新版本已下载并校验，按系统提示完成安装即可，笔记会先保存。"
+    override val debugUpdateHint = "调试版无法直接更新，请前往官网下载正式版。"
+    override val webUpdateHint = "请前往官网下载新版本。"
+    override val updateHint = "下载完成后由系统安装，笔记会先保存。首次更新需要允许常青笔记安装应用。"
+    override fun downloadFailed(error: String) = "下载失败：$error。可以重试或前往官网下载。"
+    override fun installFailed(error: String) = "安装失败：$error。可以重试或前往官网下载。"
+    override val downloadInBackground = "后台下载"
+    override val installing = "正在安装…"
+    override val installNow = "立即安装"
+    override val downloadFromWebsite = "前往官网下载"
+    override val updateNow = "立即更新"
+    override val cancelDownload = "取消下载"
+    override val websiteDownload = "官网下载"
+    override val skipVersion = "跳过此版本"
+    override val later = "稍后"
+    override val aboutTagline = "本地优先的 Markdown 笔记。离线也能写，联网后自动同步。"
+    override val version = "版本"
+    override val checkForUpdates = "检查更新"
+    override val checking = "正在检查…"
+    override fun downloadingVersion(version: String) = "正在下载 $version…"
+    override fun newVersion(version: String) = "有新版本 $version"
+    override val checkFailed = "检查失败"
+    override val upToDate = "已是最新版本"
+    override val anonymousStats = "匿名使用统计"
+    override val anonymousStatsHint = "检查更新时附带一个随机的安装编号（与账号无关），帮助我们了解有多少设备在使用常青笔记。不包含笔记内容或个人信息。"
+    override val website = "官网 ivynote.net"
+    override fun upToDateVersion(version: String) = "已是最新版本（$version）"
+    override fun checkUpdateFailed(error: String) = "检查更新失败：$error"
+    override val allowInstall = "请允许「常青笔记」安装应用，然后返回点击「立即安装」"
+    override val apkInvalid = "下载的安装包已失效，请重新下载"
+    override val signatureMismatch = "新版本与已安装的应用签名不一致，请前往官网下载安装"
+    override val noStorage = "存储空间不足"
+    override val installBlocked = "安装被系统阻止"
+    override val installIncomplete = "安装未完成"
 
     override fun unreachable(detail: String) = "无法连接服务器：$detail"
     override val notIvynote = "这个地址不是常青笔记服务器"
@@ -1013,6 +1101,50 @@ object EnStrings : Strings {
     override val displayNameOptional = "Display name (optional)"
     override val password = "Password"
     override val passwordMin8 = "Password (8+ characters)"
+
+    // Updates
+    override fun aboutNewer(newer: String) = "About Ivynote · new version $newer"
+    override fun aboutVersion(version: String) = "About Ivynote · $version"
+    override val aboutAndUpdates = "About and updates…"
+    override val updateAvailable = "New version available"
+    override fun versionReleased(version: String) = "Ivynote $version is out"
+    override fun currentVersionIs(version: String) = "Current version $version"
+    override fun downloading(progress: String) = "Downloading… $progress"
+    override val savingAndInstalling = "Saving notes and opening the installer…"
+    override val updateReady = "The new version is downloaded and verified. Follow the system prompt to install; your notes are saved first."
+    override val debugUpdateHint = "Debug builds cannot update in place; download the release from the website."
+    override val webUpdateHint = "Download the new version from the website."
+    override val updateHint = "Once downloaded, the system installs it; your notes are saved first. The first update asks you to allow Ivynote to install apps."
+    override fun downloadFailed(error: String) = "Download failed: $error. Try again or download from the website."
+    override fun installFailed(error: String) = "Install failed: $error. Try again or download from the website."
+    override val downloadInBackground = "Download in background"
+    override val installing = "Installing…"
+    override val installNow = "Install now"
+    override val downloadFromWebsite = "Download from website"
+    override val updateNow = "Update now"
+    override val cancelDownload = "Cancel download"
+    override val websiteDownload = "Website"
+    override val skipVersion = "Skip this version"
+    override val later = "Later"
+    override val aboutTagline = "Local-first Markdown notes. Write offline; they sync once you are online."
+    override val version = "Version"
+    override val checkForUpdates = "Check for updates"
+    override val checking = "Checking…"
+    override fun downloadingVersion(version: String) = "Downloading $version…"
+    override fun newVersion(version: String) = "New version $version"
+    override val checkFailed = "Check failed"
+    override val upToDate = "Up to date"
+    override val anonymousStats = "Anonymous usage statistics"
+    override val anonymousStatsHint = "Update checks carry a random install id (not tied to your account) so we know how many devices use Ivynote. No note content or personal data is sent."
+    override val website = "Website ivynote.net"
+    override fun upToDateVersion(version: String) = "Up to date ($version)"
+    override fun checkUpdateFailed(error: String) = "Could not check for updates: $error"
+    override val allowInstall = "Allow Ivynote to install apps, then come back and tap Install now"
+    override val apkInvalid = "The downloaded package is no longer valid; download it again"
+    override val signatureMismatch = "The new version is signed differently from the installed app; download it from the website"
+    override val noStorage = "Not enough storage"
+    override val installBlocked = "The system blocked the install"
+    override val installIncomplete = "The install did not finish"
 
     override fun unreachable(detail: String) = "Cannot reach the server: $detail"
     override val notIvynote = "This address is not an Ivynote server"

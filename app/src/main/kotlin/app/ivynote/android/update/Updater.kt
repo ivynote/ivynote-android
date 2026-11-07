@@ -10,6 +10,7 @@ import android.widget.Toast
 import app.ivynote.android.BuildConfig
 import app.ivynote.core.AppUpdates
 import app.ivynote.core.KeyValueStore
+import app.ivynote.core.L10n
 import app.ivynote.core.UpdateAsset
 import app.ivynote.core.UpdateInfo
 import app.ivynote.core.UpdatePrefs
@@ -108,7 +109,7 @@ class Updater(
             val info = AppUpdates.check(current, reason, prefs.installId(), arch())
             if (!info.available) {
                 set { copy(phase = Phase.IDLE, info = info) }
-                if (manual) toast("已是最新版本（$current）")
+                if (manual) toast(L10n.s.upToDateVersion(current))
                 return info
             }
             val ready = withContext(Dispatchers.IO) { info.asset?.let { a -> fileFor(info, a)?.let { AppUpdates.verified(it, a) } } == true }
@@ -122,7 +123,7 @@ class Updater(
         } catch (e: Exception) {
             val msg = e.message ?: e.javaClass.simpleName
             set { copy(phase = Phase.IDLE, error = msg, failed = Failed.CHECK) }
-            if (manual) toast("检查更新失败：$msg", long = true)
+            if (manual) toast(L10n.s.checkUpdateFailed(msg), long = true)
             null
         }
     }
@@ -172,7 +173,7 @@ class Updater(
         if (s.phase != Phase.READY) return
         if (!context.packageManager.canRequestPackageInstalls()) {
             // Android asks once per installing app: 设置 → 安装未知应用 → 常青笔记.
-            toast("请允许「常青笔记」安装应用，然后返回点击「立即安装」", long = true)
+            toast(L10n.s.allowInstall, long = true)
             runCatching {
                 context.startActivity(
                     Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
@@ -186,7 +187,7 @@ class Updater(
         scope.launch {
             beforeInstall?.let { save -> withTimeoutOrNull(10_000) { runCatching { save() } } }
             try {
-                if (!withContext(Dispatchers.IO) { AppUpdates.verified(file, asset) }) error("下载的安装包已失效，请重新下载")
+                if (!withContext(Dispatchers.IO) { AppUpdates.verified(file, asset) }) error(L10n.s.apkInvalid)
                 ApkInstaller.install(context, file)
                 // The installer answers through InstallResultReceiver.
             } catch (e: CancellationException) {
@@ -207,10 +208,10 @@ class Updater(
             else -> {
                 val why = when (status) {
                     PackageInstaller.STATUS_FAILURE_CONFLICT, PackageInstaller.STATUS_FAILURE_INCOMPATIBLE ->
-                        "新版本与已安装的应用签名不一致，请前往官网下载安装"
-                    PackageInstaller.STATUS_FAILURE_STORAGE -> "存储空间不足"
-                    PackageInstaller.STATUS_FAILURE_BLOCKED -> "安装被系统阻止"
-                    else -> message?.takeIf { it.isNotBlank() } ?: "安装未完成"
+                        L10n.s.signatureMismatch
+                    PackageInstaller.STATUS_FAILURE_STORAGE -> L10n.s.noStorage
+                    PackageInstaller.STATUS_FAILURE_BLOCKED -> L10n.s.installBlocked
+                    else -> message?.takeIf { it.isNotBlank() } ?: L10n.s.installIncomplete
                 }
                 set { copy(phase = Phase.READY, open = true, error = why, failed = Failed.INSTALL) }
             }

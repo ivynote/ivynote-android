@@ -281,7 +281,7 @@ private fun LibraryHeader(ui: LibraryUiState, session: SessionStore?, state: app
                 onClick = { open = false; choosingLanguage = true })
             DropdownMenuItem(text = { Text(s.manageLibraries) }, leadingIcon = { Icon(Icons.Outlined.Book, null) },
                 onClick = { open = false; catalog.open(null) })
-            DropdownMenuItem(text = { Text("关于与检查更新…") }, leadingIcon = { Icon(Icons.Outlined.Info, null) },
+            DropdownMenuItem(text = { Text(s.aboutAndUpdates) }, leadingIcon = { Icon(Icons.Outlined.Info, null) },
                 onClick = { open = false; about = true })
         }
     }
