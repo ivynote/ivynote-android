@@ -74,6 +74,8 @@ fun LibrariesScreen() {
     var creatingLocal by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<LibraryRef?>(null) }
     var removing by remember { mutableStateOf<LibraryRef?>(null) }
+    var about by remember { mutableStateOf(false) }
+    val update by IvyApp.instance.updater.state.collectAsState()
 
     // "Turn on sync" chosen inside a local library: continue here once it has closed.
     LaunchedEffect(pendingSync) {
@@ -157,9 +159,21 @@ fun LibrariesScreen() {
                     }
                 }
             }
+            item {
+                Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
+                    TextButton(onClick = { about = true }) {
+                        val newer = update.info?.takeIf { it.available }?.latest
+                        Text(
+                            if (newer != null) "关于常青笔记 · 有新版本 $newer" else "关于常青笔记 · ${IvyApp.instance.updater.current}",
+                            color = if (newer != null) c.ivy else c.muted, fontSize = 13.sp,
+                        )
+                    }
+                }
+            }
         }
     }
 
+    if (about) AboutSheet(onDismiss = { about = false })
     if (creatingLocal) {
         TextInputDialog(
             title = "新建本地笔记库",

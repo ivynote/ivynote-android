@@ -7,6 +7,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import app.ivynote.android.platform.KeystoreCredentialStore
 import app.ivynote.android.platform.SharedPrefsStore
+import app.ivynote.android.update.Updater
 import app.ivynote.core.IvyHttp
 import app.ivynote.core.LibraryCatalog
 import app.ivynote.core.OfficialRegions
@@ -27,6 +28,10 @@ class IvyApp : Application() {
     lateinit var prefs: SharedPrefsStore
         private set
     lateinit var catalog: LibraryCatalog
+        private set
+
+    /** New versions from the website: checks, the update dialog, downloads, install. */
+    lateinit var updater: Updater
         private set
 
     /** For work that must finish after a screen is gone (pushing before sign-out). */
@@ -51,6 +56,8 @@ class IvyApp : Application() {
             override fun onStart(owner: LifecycleOwner) { _foreground.value = true }
             override fun onStop(owner: LifecycleOwner) { _foreground.value = false }
         })
+        updater = Updater(this, appScope, prefs, foreground)
+        updater.start()
     }
 
     /** This install's HLC node and `device` name, e.g. `android-a1b2c3d4` (guide 6.2). */
