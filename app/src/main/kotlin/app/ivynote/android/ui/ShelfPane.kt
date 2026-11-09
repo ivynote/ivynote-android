@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Restore
@@ -275,6 +276,8 @@ private fun LibraryHeader(ui: LibraryUiState, session: SessionStore?, state: app
                 DropdownMenuItem(text = { Text(s.turnOnSyncEllipsis) }, leadingIcon = { Icon(Icons.Outlined.CloudUpload, null) },
                     onClick = { open = false; catalog.turnOnSync(ref.id) })
             }
+            DropdownMenuItem(text = { Text(s.agenda) }, leadingIcon = { Icon(Icons.Outlined.Event, null) },
+                onClick = { open = false; ui.showAgenda = true })
             DropdownMenuItem(text = { Text(s.mediaLibrary) }, leadingIcon = { Icon(Icons.Outlined.PhotoLibrary, null) },
                 onClick = { open = false; ui.showMedia = true })
             DropdownMenuItem(text = { Text(s.language) }, leadingIcon = { Icon(Icons.Outlined.Language, null) },

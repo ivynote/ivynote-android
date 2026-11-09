@@ -9,6 +9,7 @@ import app.ivynote.android.editor.AttachmentLoader
 import app.ivynote.android.editor.EditorHost
 import app.ivynote.android.platform.SqliteDocumentStore
 import app.ivynote.android.platform.networkAvailable
+import app.ivynote.android.reminders.Reminders
 import app.ivynote.core.L10n
 import app.ivynote.core.AddedFile
 import app.ivynote.core.ApiClient
@@ -30,6 +31,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -67,6 +69,15 @@ class LibrarySession private constructor(
         // What was just uploaded shows from the cache, offline too, without a download.
         engine.onUploaded = { att, file ->
             runCatching { AttachmentLoader.store(cache, att.id, file, att.mime) }
+        }
+        // Reminders follow the notes: the system's alarms are set again a
+        // moment after any change (guide 11.8).
+        scope.launch {
+            engine.revision.collectLatest {
+                delay(1_500)
+                val notes = engine.notes.values.toList()
+                withContext(Dispatchers.Default) { runCatching { Reminders.schedule(context, ref.id, notes) } }
+            }
         }
     }
 
@@ -180,6 +191,7 @@ class LibrarySession private constructor(
     fun destroy() {
         if (closed) return
         closed = true
+        Reminders.clear(context, ref.id)
         deactivate()
         engine.stop()
         editorHost?.destroy()

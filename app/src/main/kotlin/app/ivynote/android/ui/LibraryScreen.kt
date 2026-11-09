@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.ivynote.android.IvyApp
+import app.ivynote.android.MainActivity
 import app.ivynote.android.LibrarySession
 import app.ivynote.core.L10n
 import app.ivynote.core.SessionStore
@@ -51,6 +52,9 @@ class LibraryUiState(val lib: LibrarySession) {
     var expanded by mutableStateOf(IvyApp.instance.catalog.expanded(lib.ref.id))
     var showAccount by mutableStateOf(false)
     var showMedia by mutableStateOf(false)
+    var showAgenda by mutableStateOf(false)
+    /** A line to show once the note opens (a task picked on the agenda). */
+    var pendingLine by mutableStateOf<Pair<String, Int>?>(null)
 
     val selectedNote: String? get() = selection?.let(Shelf::noteId)
 
@@ -150,6 +154,29 @@ fun LibraryScreen(lib: LibrarySession, session: SessionStore?) {
                     ShelfPane(ui, session, wide = false, modifier = Modifier.fillMaxSize())
                 }
             }
+        }
+    }
+
+    if (ui.showAgenda) {
+        AgendaSheet(lib, onOpen = { id, line ->
+            ui.showAgenda = false
+            ui.pendingLine = id to line
+            ui.reveal(id)
+        }, onDismiss = { ui.showAgenda = false })
+    }
+
+    // A tapped reminder: its note, in its library.
+    val request by MainActivity.openRequest.collectAsState()
+    LaunchedEffect(request) {
+        val r = request ?: return@LaunchedEffect
+        val catalog = IvyApp.instance.catalog
+        when {
+            r.library == lib.ref.id -> {
+                MainActivity.openRequest.value = null
+                if (engine.notes[r.note] != null) ui.reveal(r.note)
+            }
+            catalog.library(r.library) != null -> catalog.open(r.library)
+            else -> MainActivity.openRequest.value = null
         }
     }
 

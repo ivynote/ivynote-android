@@ -32,6 +32,7 @@ import app.ivynote.core.Language
 import app.ivynote.core.Attachment
 import app.ivynote.core.IvyJson
 import app.ivynote.core.Note
+import app.ivynote.core.NoteLock
 import app.ivynote.core.SyncEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -90,6 +91,12 @@ class EditorHost(appContext: Context, private val session: LibrarySession) {
     private val _topLine = MutableStateFlow(0)
     val topLine: StateFlow<Int> = _topLine.asStateFlow()
 
+    /** Whether the open note has a password (guide 8.4), and is locked now. */
+    data class Protection(val protected: Boolean = false, val locked: Boolean = false)
+
+    private val _protection = MutableStateFlow(Protection())
+    val protection: StateFlow<Protection> = _protection.asStateFlow()
+
     /** A followed `[[wiki link]]`: id ("" when no such note) and title. */
     var onOpenNote: ((String, String) -> Unit)? = null
 
@@ -119,6 +126,8 @@ class EditorHost(appContext: Context, private val session: LibrarySession) {
     fun open(note: Note, focus: Boolean) {
         noteId = note.id
         pageBody = note.body
+        val sealed = NoteLock.isEncrypted(note.body)
+        _protection.value = Protection(protected = sealed, locked = sealed)
         _topLine.value = 0
         sendTitles()
         refreshKinds()
@@ -243,6 +252,12 @@ class EditorHost(appContext: Context, private val session: LibrarySession) {
             }
             "open" -> onOpenNote?.invoke(m.str("id").orEmpty(), m.str("title").orEmpty())
             "focus" -> _focused.value = (m["focused"] as? JsonPrimitive)?.booleanOrNull ?: false
+            "protection" -> if (m.str("id") == noteId) {
+                _protection.value = Protection(
+                    protected = (m["protected"] as? JsonPrimitive)?.booleanOrNull ?: false,
+                    locked = (m["locked"] as? JsonPrimitive)?.booleanOrNull ?: false,
+                )
+            }
             "scroll" -> _topLine.value = (m["line"] as? JsonPrimitive)?.intOrNull ?: 0
             "error", "log" -> if (BuildConfig.DEBUG) Log.d("ivy", "page ${m.str("type")}: ${m.str("message")}")
         }

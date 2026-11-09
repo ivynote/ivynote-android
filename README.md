@@ -53,6 +53,19 @@ repository does not keep a copy.
   push. A refused file (too large) is reported and does not hold back sync.
   A local library keeps its files on the device (de-duplicated by SHA-256)
   and uploads them when it turns on sync.
+- **Dates and reminders** (guide 9.4, 11.8): `@明天 9点` completion, date chips
+  and the picker come with the editor page; the format bar has a date button.
+  The agenda (library menu → 日程) lists open dated to-dos across the
+  library, checks them off and opens a note at its task. Reminders are
+  system alarms (`reminders/Reminders.kt`, `Tasks` in core): set again a
+  moment after any change, restored after a reboot or update, exact when the
+  system allows it. Android 13+ asks for notification permission the first
+  time there is something to remind of; a tapped reminder opens its note.
+- **Password-protected notes** (guide 8.4): the editor page shows the lock
+  panel, asks for the password and seals every edit; the app only ever stores
+  and syncs the sealed body. Note menu: 设置密码 / 更改密码 / 移除密码 /
+  立即锁定. Protected notes are found by title only, cannot be shared, and
+  take no part in the agenda or reminders.
 - **Media library**: filters (all, images, video, audio, files, unreferenced,
   trash), file name search, a thumbnail grid, and details: preview, the notes
   that reference the file, rename, public link (make, copy, revoke),
