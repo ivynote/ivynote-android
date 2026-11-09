@@ -406,6 +406,7 @@ interface Strings {
     val agendaLater: String
     val dateAndReminder: String
     val formatDue: String
+    val formatInsert: String
     val protectNote: String
     val changeNotePassword: String
     val removeNotePassword: String
@@ -810,6 +811,7 @@ object ZhStrings : Strings {
     override val agendaLater = "接下来"
     override val dateAndReminder = "日期与提醒"
     override val formatDue = "日期与提醒"
+    override val formatInsert = "插入"
     override val protectNote = "设置密码…"
     override val changeNotePassword = "更改密码…"
     override val removeNotePassword = "移除密码"
@@ -1232,6 +1234,7 @@ object EnStrings : Strings {
     override val agendaLater = "Coming up"
     override val dateAndReminder = "Date & reminder"
     override val formatDue = "Date & reminder"
+    override val formatInsert = "Insert"
     override val protectNote = "Protect with password…"
     override val changeNotePassword = "Change password…"
     override val removeNotePassword = "Remove password"

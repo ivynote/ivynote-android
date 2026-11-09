@@ -97,6 +97,9 @@ class EditorHost(appContext: Context, private val session: LibrarySession) {
     private val _protection = MutableStateFlow(Protection())
     val protection: StateFlow<Protection> = _protection.asStateFlow()
 
+    /** The insert menu asks for a photo ("image") or a file ("file"). */
+    var onPick: ((String) -> Unit)? = null
+
     /** A followed `[[wiki link]]`: id ("" when no such note) and title. */
     var onOpenNote: ((String, String) -> Unit)? = null
 
@@ -252,6 +255,7 @@ class EditorHost(appContext: Context, private val session: LibrarySession) {
             }
             "open" -> onOpenNote?.invoke(m.str("id").orEmpty(), m.str("title").orEmpty())
             "focus" -> _focused.value = (m["focused"] as? JsonPrimitive)?.booleanOrNull ?: false
+            "pick" -> onPick?.invoke(m.str("kind").orEmpty())
             "protection" -> if (m.str("id") == noteId) {
                 _protection.value = Protection(
                     protected = (m["protected"] as? JsonPrimitive)?.booleanOrNull ?: false,

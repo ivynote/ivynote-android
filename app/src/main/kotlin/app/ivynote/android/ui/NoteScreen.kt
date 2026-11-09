@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AddLink
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Event
@@ -64,6 +65,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -121,6 +123,11 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
     fun pick(open: () -> Unit) {
         pickTarget = noteId
         open()
+    }
+    // Photos and files chosen from the editor's insert menu ("/" or ＋).
+    DisposableEffect(host, noteId) {
+        host.onPick = { kind -> if (kind == "image") pick(picker.photos) else pick(picker.files) }
+        onDispose { host.onPick = null }
     }
 
     // Open the note in the editor once per note; afterwards only changes from elsewhere go in.
@@ -336,6 +343,7 @@ private fun FormatBar(host: app.ivynote.android.editor.EditorHost, modifier: Mod
         Triple("file", Icons.Outlined.AttachFile, s.formatAttachment),
     )
     val items: List<Triple<String, ImageVector, String>> = listOf(
+        Triple("insert", Icons.Outlined.Add, s.formatInsert),
         Triple("h1", Icons.Outlined.Title, s.formatHeading),
         Triple("bold", Icons.Outlined.FormatBold, s.formatBold),
         Triple("italic", Icons.Outlined.FormatItalic, s.formatItalic),
