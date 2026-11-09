@@ -57,7 +57,6 @@ object Reminders {
     }
 
     fun ensureChannel(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
         val ch = NotificationChannel(CHANNEL, L10n.s.reminderChannel, NotificationManager.IMPORTANCE_HIGH)
         ch.description = L10n.s.reminderChannelHint
@@ -143,7 +142,15 @@ object Reminders {
             .setAutoCancel(true)
             .setContentIntent(tap)
             .build()
-        runCatching { NotificationManagerCompat.from(context).notify(key.hashCode(), n) }
+        // Checked here, where the call is: the permission can be withdrawn at any time.
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+        try {
+            NotificationManagerCompat.from(context).notify(key.hashCode(), n)
+        } catch (_: SecurityException) {
+            // Withdrawn between the check and the call: nothing to show.
+        }
     }
 }
 
