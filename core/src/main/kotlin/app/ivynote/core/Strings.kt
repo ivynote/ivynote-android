@@ -395,6 +395,31 @@ interface Strings {
     val serverInvalid: String
     fun unsupportedScheme(scheme: String): String
     fun insecureRemote(host: String): String
+
+    // Dates, reminders and protected notes (guide 8.4, 9.4, 11.8)
+    val agenda: String
+    val agendaEmpty: String
+    val agendaEmptyHint: String
+    val agendaProtectedHint: String
+    val agendaOverdue: String
+    val agendaToday: String
+    val agendaLater: String
+    val dateAndReminder: String
+    val formatDue: String
+    val formatInsert: String
+    val protectNote: String
+    val changeNotePassword: String
+    val removeNotePassword: String
+    val lockNoteNow: String
+    val protectedNote: String
+    val reminderChannel: String
+    val reminderChannelHint: String
+    fun reminderFrom(title: String): String
+    fun daysLeft(days: Long): String
+    /** A day branch of the agenda: 今天 · 11月9日 周一, 11月12日 周三. */
+    fun agendaDay(date: java.time.LocalDate, today: java.time.LocalDate): String
+    /** A month branch: 本月稍后, 12月, 2027年1月. */
+    fun agendaMonth(month: java.time.YearMonth, today: java.time.LocalDate): String
 }
 
 object ZhStrings : Strings {
@@ -776,6 +801,44 @@ object ZhStrings : Strings {
     override val serverInvalid = "服务器地址无效"
     override fun unsupportedScheme(scheme: String) = "不支持的协议：$scheme"
     override fun insecureRemote(host: String) = "$host 不是局域网地址，必须使用 https://"
+
+    override val agenda = "日程"
+    override val agendaEmpty = "还没有带日期的待办"
+    override val agendaEmptyHint = "在待办后输入 @明天 9点、@周五，或点格式栏的日期按钮。选好日期就会出现在这里，到点提醒。"
+    override val agendaProtectedHint = "加密笔记中的待办不会出现在日程里。"
+    override val agendaOverdue = "已逾期"
+    override val agendaToday = "今天"
+    override val agendaLater = "接下来"
+    override val dateAndReminder = "日期与提醒"
+    override val formatDue = "日期与提醒"
+    override val formatInsert = "插入"
+    override val protectNote = "设置密码…"
+    override val changeNotePassword = "更改密码…"
+    override val removeNotePassword = "移除密码"
+    override val lockNoteNow = "立即锁定"
+    override val protectedNote = "已加密"
+    override val reminderChannel = "待办提醒"
+    override val reminderChannelHint = "带日期的待办到点提醒"
+    override fun reminderFrom(title: String) = "来自《$title》"
+    override fun agendaDay(date: java.time.LocalDate, today: java.time.LocalDate): String {
+        val wd = arrayOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")[date.dayOfWeek.value - 1]
+        val day = (if (date.year == today.year) "" else "${date.year}年") + "${date.monthValue}月${date.dayOfMonth}日 $wd"
+        return when (date) {
+            today -> "今天 · $day"
+            today.plusDays(1) -> "明天 · $day"
+            else -> day
+        }
+    }
+    override fun agendaMonth(month: java.time.YearMonth, today: java.time.LocalDate): String = when {
+        month == java.time.YearMonth.from(today) -> "本月稍后"
+        month.year == today.year -> "${month.monthValue}月"
+        else -> "${month.year}年${month.monthValue}月"
+    }
+    override fun daysLeft(days: Long) = when {
+        days == 0L -> "今天"
+        days > 0 -> "$days 天后"
+        else -> "逾期 ${-days} 天"
+    }
 }
 
 object EnStrings : Strings {
@@ -1161,4 +1224,42 @@ object EnStrings : Strings {
     override val serverInvalid = "The server address is not valid"
     override fun unsupportedScheme(scheme: String) = "Unsupported protocol: $scheme"
     override fun insecureRemote(host: String) = "$host is not on the local network; use https://"
+
+    override val agenda = "Agenda"
+    override val agendaEmpty = "No dated to-dos yet"
+    override val agendaEmptyHint = "Type @tomorrow 9am or @fri after a to-do, or tap the date button in the format bar. Dated to-dos appear here and remind you when they are due."
+    override val agendaProtectedHint = "To-dos in password-protected notes are not shown here."
+    override val agendaOverdue = "Overdue"
+    override val agendaToday = "Today"
+    override val agendaLater = "Coming up"
+    override val dateAndReminder = "Date & reminder"
+    override val formatDue = "Date & reminder"
+    override val formatInsert = "Insert"
+    override val protectNote = "Protect with password…"
+    override val changeNotePassword = "Change password…"
+    override val removeNotePassword = "Remove password"
+    override val lockNoteNow = "Lock now"
+    override val protectedNote = "Protected"
+    override val reminderChannel = "To-do reminders"
+    override val reminderChannelHint = "Dated to-dos when they are due"
+    override fun reminderFrom(title: String) = "From “$title”"
+    override fun agendaDay(date: java.time.LocalDate, today: java.time.LocalDate): String {
+        val pattern = if (date.year == today.year) "EEE, MMM d" else "EEE, MMM d, yyyy"
+        val day = date.format(java.time.format.DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH))
+        return when (date) {
+            today -> "Today · $day"
+            today.plusDays(1) -> "Tomorrow · $day"
+            else -> day
+        }
+    }
+    override fun agendaMonth(month: java.time.YearMonth, today: java.time.LocalDate): String {
+        if (month == java.time.YearMonth.from(today)) return "Later this month"
+        val pattern = if (month.year == today.year) "MMMM" else "MMMM yyyy"
+        return month.format(java.time.format.DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH))
+    }
+    override fun daysLeft(days: Long) = when {
+        days == 0L -> "today"
+        days > 0 -> if (days == 1L) "in 1 day" else "in $days days"
+        else -> if (days == -1L) "1 day overdue" else "${-days} days overdue"
+    }
 }

@@ -28,9 +28,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AddLink
 import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.PhotoCamera
@@ -60,6 +65,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -108,6 +114,7 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
     var history by remember { mutableStateOf(false) }
     var sharing by remember { mutableStateOf(false) }
     val adding by lib.adding.collectAsState()
+    val protection by host.protection.collectAsState()
     val linkCount = remember(revision, noteId) { Links.backlinks(noteId, engine.notes.values).size }
 
     // Picked files land in the note they were picked for, even if another is open by the time they are ready.
@@ -117,12 +124,22 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
         pickTarget = noteId
         open()
     }
+    // Photos and files chosen from the editor's insert menu ("/" or ＋).
+    DisposableEffect(host, noteId) {
+        host.onPick = { kind -> if (kind == "image") pick(picker.photos) else pick(picker.files) }
+        onDispose { host.onPick = null }
+    }
 
     // Open the note in the editor once per note; afterwards only changes from elsewhere go in.
     LaunchedEffect(noteId) {
         host.setTheme(dark)
         val n = engine.notes[noteId] ?: return@LaunchedEffect
         host.open(n, focus = n.body.isEmpty() && n.title.isEmpty() && !n.isTrashed)
+        // Opened from the agenda: show the task.
+        ui.pendingLine?.takeIf { it.first == noteId }?.let { (_, line) ->
+            ui.pendingLine = null
+            host.scrollToLine(line)
+        }
     }
     LaunchedEffect(dark) { host.setTheme(dark) }
     LaunchedEffect(s) { host.setLanguage(L10n.language) }
@@ -163,7 +180,11 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
             if (focused && !wide) {
                 TextButton(onClick = { host.hideKeyboard() }) { Text(s.done, color = c.ivy, fontWeight = FontWeight.SemiBold) }
             }
-            if (!note.isTrashed) {
+            if (protection.protected) {
+                Icon(Icons.Outlined.Lock, contentDescription = s.protectedNote, tint = c.faint, modifier = Modifier.padding(horizontal = 6.dp).size(18.dp))
+            }
+            // A protected note is never shared: the server cannot read it.
+            if (!note.isTrashed && !protection.protected) {
                 IconButton(onClick = { sharing = true }) { Icon(Icons.Outlined.IosShare, contentDescription = s.share, tint = c.ink2) }
             }
             IconButton(onClick = { outline = true }) { Icon(Icons.Outlined.Toc, contentDescription = s.outline, tint = c.ink2) }
@@ -179,6 +200,24 @@ fun NoteScreen(ui: LibraryUiState, noteId: String, wide: Boolean, onBack: () -> 
                     if (!engine.isLocal) {
                         DropdownMenuItem(text = { Text(s.history) }, leadingIcon = { Icon(Icons.Outlined.History, null) },
                             onClick = { menu = false; history = true })
+                    }
+                    if (!note.isTrashed && !protection.locked) {
+                        DropdownMenuItem(text = { Text(s.dateAndReminder) }, leadingIcon = { Icon(Icons.Outlined.Event, null) },
+                            onClick = { menu = false; host.command("due") })
+                    }
+                    if (!note.isTrashed && !protection.locked) {
+                        HorizontalDivider()
+                        if (protection.protected) {
+                            DropdownMenuItem(text = { Text(s.lockNoteNow) }, leadingIcon = { Icon(Icons.Outlined.Lock, null) },
+                                onClick = { menu = false; host.command("lock") })
+                            DropdownMenuItem(text = { Text(s.changeNotePassword) }, leadingIcon = { Icon(Icons.Outlined.VpnKey, null) },
+                                onClick = { menu = false; host.command("changePassword") })
+                            DropdownMenuItem(text = { Text(s.removeNotePassword) }, leadingIcon = { Icon(Icons.Outlined.LockOpen, null) },
+                                onClick = { menu = false; host.command("unprotect") })
+                        } else {
+                            DropdownMenuItem(text = { Text(s.protectNote) }, leadingIcon = { Icon(Icons.Outlined.Lock, null) },
+                                onClick = { menu = false; host.command("protect") })
+                        }
                     }
                     HorizontalDivider()
                     NoteMenuItems(note, ui, engine, ShelfActions(
@@ -304,10 +343,12 @@ private fun FormatBar(host: app.ivynote.android.editor.EditorHost, modifier: Mod
         Triple("file", Icons.Outlined.AttachFile, s.formatAttachment),
     )
     val items: List<Triple<String, ImageVector, String>> = listOf(
+        Triple("insert", Icons.Outlined.Add, s.formatInsert),
         Triple("h1", Icons.Outlined.Title, s.formatHeading),
         Triple("bold", Icons.Outlined.FormatBold, s.formatBold),
         Triple("italic", Icons.Outlined.FormatItalic, s.formatItalic),
         Triple("task", Icons.Outlined.CheckBox, s.formatTask),
+        Triple("due", Icons.Outlined.Event, s.formatDue),
         Triple("list", Icons.AutoMirrored.Filled.FormatListBulleted, s.formatList),
         Triple("ordered", Icons.Outlined.FormatListNumbered, s.formatOrdered),
         Triple("quote", Icons.Outlined.FormatQuote, s.formatQuote),

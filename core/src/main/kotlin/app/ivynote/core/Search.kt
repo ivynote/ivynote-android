@@ -19,7 +19,9 @@ object Search {
         for (n in notes) {
             if (n.isTrashed || n.deleted) continue
             val title = n.title.lowercase()
-            val body = n.body.lowercase()
+            // A protected note is found by its title only (guide 8.4).
+            val locked = NoteLock.isEncrypted(n.body)
+            val body = if (locked) "" else n.body.lowercase()
             var score = 0.0
             var all = true
             for (t in terms) {
@@ -35,7 +37,7 @@ object Search {
             }
             if (!all) continue
             score += maxOf(0.0, 1 - (now - n.updatedAt).toDouble() / YEAR_MS)
-            val (snippet, ranges) = snippet(n.body, terms)
+            val (snippet, ranges) = snippet(if (locked) "" else n.body, terms)
             hits += Hit(n, score, snippet, ranges)
         }
         return hits.sortedWith(compareByDescending<Hit> { it.score }.thenByDescending { it.note.updatedAt }).take(limit)

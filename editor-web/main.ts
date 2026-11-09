@@ -11,17 +11,30 @@
 //   focus {focused}    the editor gained or lost the keyboard
 //   scroll {line}      the 0-based line at the top of the view (the outline)
 //   error {message}    an uncaught script error, for the debug log
+//   protection {id, protected, locked}
+//                      whether the open note has a password, and is locked
+//
+//   pick {kind}        the insert menu asks for a photo ('image') or a file ('file')
+//
+// command() also takes: insert (the "/" menu at the cursor, for a ＋ button),
+// due (date picker for the task at the cursor),
+// protect / unprotect / changePassword / lock (guide 8.4). A protected note's
+// body only ever leaves this page sealed.
 
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search';
-import { Compartment, EditorState } from '@codemirror/state';
+import { Compartment, EditorState, Transaction } from '@codemirror/state';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { insertLink, insertText, insertWiki, toggleLinePrefix, toggleWrap } from '@ivynote/editor/commands';
 import { livePreview, type PreviewOptions } from '@ivynote/editor/livePreview';
 import { baseTheme, markdownHighlight } from '@ivynote/editor/theme';
 import { wikiCompletion } from '@ivynote/editor/wikiComplete';
+import { dateCompletion, openDuePicker } from '@ivynote/editor/dates';
+import { insertMenu, insertMenuLook, openInsertMenu, slashCompletion } from '@ivynote/editor/insert';
+import { selectionToolbar } from '@ivynote/editor/bubble';
+import { Protection } from '@ivynote/editor/protection';
 import { normalizeTitle } from '@ivynote/core/markdown/links';
 import { renderMarkdown } from '@ivynote/core/markdown/render';
 
@@ -107,7 +120,10 @@ function extensions(readonly: boolean) {
 		baseTheme,
 		EditorView.lineWrapping,
 		placeholderConf.of(placeholder(w().placeholder)),
-		autocompletion({ override: [wikiCompletion(completions)], icons: false, activateOnTyping: true }),
+		// "/" opens the insert menu; photos and files are picked by the app.
+		autocompletion({ override: [slashCompletion({ hosts: ['image', 'file'], host: (kind) => post({ type: 'pick', kind }) }), dateCompletion, wikiCompletion(completions)], icons: false, activateOnTyping: true, maxRenderedOptions: 40, ...insertMenuLook }),
+		insertMenu(),
+		selectionToolbar(),
 		keymap.of([
 			{ key: 'Mod-b', run: (v) => toggleWrap(v, '**', w().bold) },
 			{ key: 'Mod-i', run: (v) => toggleWrap(v, '*', w().italic) },
@@ -121,6 +137,9 @@ function extensions(readonly: boolean) {
 			{ key: 'Mod-Shift-7', run: (v) => toggleLinePrefix(v, '1. ') },
 			{ key: 'Mod-Shift-8', run: (v) => toggleLinePrefix(v, '- ') },
 			{ key: 'Mod-Shift-9', run: (v) => toggleLinePrefix(v, '- [ ] ') },
+			{ key: 'Mod-Shift-d', run: (v) => (openDuePicker(v), true) },
+			{ key: 'Mod-/', run: openInsertMenu },
+			{ key: 'Mod-Shift-h', run: (v) => toggleWrap(v, '==') },
 			...closeBracketsKeymap,
 			...completionKeymap,
 			...searchKeymap,
@@ -134,14 +153,59 @@ function extensions(readonly: boolean) {
 		EditorView.updateListener.of((u) => {
 			if (u.focusChanged) post({ type: 'focus', focused: u.view.hasFocus });
 			if (!u.docChanged) return;
-			const text = u.state.doc.toString();
-			lastEmitted = text;
-			post({ type: 'change', id: noteId, body: text });
+			// Text put in from outside (sync, another device) is not sent back.
+			if (u.transactions.every((tr) => tr.annotation(Transaction.remote))) return;
+			// A protected note leaves the page sealed (guide 8.4).
+			const body = protection.edited(u.state.doc.toString());
+			lastEmitted = body;
+			post({ type: 'change', id: noteId, body });
 		})
 	];
 }
 
 const host = document.getElementById('editor')!;
+let loadReadonly = false;
+
+/** Puts text that changed elsewhere into the editor with the minimal diff,
+ *  so the cursor stays where it is. */
+function replaceText(v: string) {
+	if (!view) return;
+	const cur = view.state.doc.toString();
+	if (v === cur) return;
+	let start = 0;
+	while (start < cur.length && start < v.length && cur[start] === v[start]) start++;
+	let endCur = cur.length;
+	let endNew = v.length;
+	while (endCur > start && endNew > start && cur[endCur - 1] === v[endNew - 1]) {
+		endCur--;
+		endNew--;
+	}
+	view.dispatch({ changes: { from: start, to: endCur, insert: v.slice(start, endNew) }, annotations: Transaction.remote.of(true) });
+}
+
+// Password-protected notes: the page holds the plaintext only while
+// unlocked; the app only ever sees the sealed body.
+const protection = new Protection({
+	lockHost: host,
+	show(text) {
+		const state = EditorState.create({ doc: text, extensions: extensions(loadReadonly) });
+		if (view) view.setState(state);
+		else view = new EditorView({ state, parent: host });
+		view.scrollDOM.scrollTop = 0;
+	},
+	hide() {
+		view?.destroy();
+		view = null;
+	},
+	replace: replaceText,
+	text: () => view?.state.doc.toString() ?? null,
+	emit(body) {
+		lastEmitted = body;
+		post({ type: 'change', id: noteId, body });
+	},
+	state: (s) => post({ type: 'protection', id: noteId, ...s }),
+	readonly: () => !view || view.state.readOnly
+});
 
 // The page scrolls, not CodeMirror. Report the line at the top of the
 // window, once per frame, so the outline can mark where the reader is.
@@ -172,33 +236,23 @@ window.ivy = {
 	load(p: LoadPayload) {
 		noteId = p.id;
 		lastEmitted = p.body;
+		loadReadonly = !!p.readonly;
 		if (p.fontSize) document.documentElement.style.setProperty('--editor-size', `${p.fontSize}px`);
-		const state = EditorState.create({ doc: p.body, extensions: extensions(!!p.readonly) });
-		if (view) view.setState(state);
-		else view = new EditorView({ state, parent: host });
-		view.scrollDOM.scrollTop = 0;
+		
+		// The editor, or the lock panel of a protected note.
+		protection.load(p.body);
 		document.scrollingElement?.scrollTo(0, 0);
 		lastTop = -1;
 		reportTop();
-		if (p.focus) window.ivy.focus(true);
+		if (p.focus && !protection.isLocked) window.ivy.focus(true);
 	},
 
 	/** A body that changed elsewhere (sync, merge). Applies the minimal diff
 	 *  so the cursor stays where it is. */
 	setBody(id: string, v: string) {
-		if (!view || id !== noteId || v === lastEmitted) return;
-		const cur = view.state.doc.toString();
+		if (id !== noteId || v === lastEmitted) return;
 		lastEmitted = v;
-		if (v === cur) return;
-		let start = 0;
-		while (start < cur.length && start < v.length && cur[start] === v[start]) start++;
-		let endCur = cur.length;
-		let endNew = v.length;
-		while (endCur > start && endNew > start && cur[endCur - 1] === v[endNew - 1]) {
-			endCur--;
-			endNew--;
-		}
-		view.dispatch({ changes: { from: start, to: endCur, insert: v.slice(start, endNew) } });
+		protection.external(v);
 	},
 
 	setTitles(list: TitleEntry[]) {
@@ -257,8 +311,16 @@ window.ivy = {
 
 	/** Formatting from the native toolbar. */
 	command(name: string) {
+		switch (name) {
+			case 'protect': void protection.protect(); return;
+			case 'unprotect': void protection.unprotect(); return;
+			case 'changePassword': void protection.changePassword(); return;
+			case 'lock': protection.lock(); return;
+		}
 		if (!view) return;
 		switch (name) {
+			case 'due': openDuePicker(view); return;
+			case 'insert': openInsertMenu(view); return;
 			case 'bold': toggleWrap(view, '**', w().bold); break;
 			case 'italic': toggleWrap(view, '*', w().italic); break;
 			case 'strike': toggleWrap(view, '~~', w().strike); break;
