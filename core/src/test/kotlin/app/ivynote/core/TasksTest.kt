@@ -69,4 +69,28 @@ class TasksTest {
         assertTrue(Search.run(notes, "AA==").isEmpty())
         assertEquals("", Search.run(notes, "secret").single().snippet)
     }
+
+    @Test fun groupsTheAgendaByDay() {
+        val days = listOf("2026-11-01", "2026-11-09", "2026-11-10", "2026-11-12", "2026-11-12", "2026-11-16", "2026-12-03")
+        val note = Note("t", title = "t", body = days.mapIndexed { i, d -> "- [ ] t$i 📅 $d" }.joinToString("\n"))
+        val tree = Tasks.agendaTree(Tasks.agenda(listOf(note), LocalDate.of(2026, 11, 9)))
+        assertEquals(
+            listOf("overdue" to 1, "d:2026-11-09" to 1, "d:2026-11-10" to 1, "d:2026-11-12" to 2, "m:2026-11" to 1, "m:2026-12" to 1),
+            tree.map { it.key to it.items.size },
+        )
+        assertEquals(Tasks.AgendaNode.Kind.TOMORROW, tree[2].kind)
+        assertTrue(tree[1].openByDefault)
+        assertFalse(tree[3].openByDefault)
+    }
+}
+
+class AgendaLabelTest {
+    @Test fun namesDaysAndMonths() {
+        val today = LocalDate.of(2026, 11, 9)
+        assertEquals("今天 · 11月9日 周一", ZhStrings.agendaDay(today, today))
+        assertEquals("Tomorrow · Tue, Nov 10", EnStrings.agendaDay(today.plusDays(1), today))
+        assertEquals("2027年1月2日 周六", ZhStrings.agendaDay(LocalDate.of(2027, 1, 2), today))
+        assertEquals("本月稍后", ZhStrings.agendaMonth(java.time.YearMonth.of(2026, 11), today))
+        assertEquals("January 2027", EnStrings.agendaMonth(java.time.YearMonth.of(2027, 1), today))
+    }
 }

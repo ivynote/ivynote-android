@@ -110,6 +110,40 @@ object Tasks {
         return out.sortedWith(compareBy<AgendaItem> { it.task.due!!.date }.thenBy { it.task.due!!.time ?: LocalTime.MAX }.thenBy { it.noteTitle }.thenBy { it.task.line })
     }
 
+    /** A branch of the agenda tree: overdue, a day of the coming week, or a month. */
+    data class AgendaNode(val key: String, val kind: Kind, val date: LocalDate?, val month: java.time.YearMonth?, val items: List<AgendaItem>) {
+        enum class Kind { OVERDUE, TODAY, TOMORROW, DAY, MONTH }
+
+        /** Overdue, today and tomorrow start open; the rest start folded. */
+        val openByDefault: Boolean get() = kind == Kind.OVERDUE || kind == Kind.TODAY || kind == Kind.TOMORROW
+    }
+
+    /** Days within this many days get a branch each; later ones group by month (as the web). */
+    const val AGENDA_DAYS = 7
+
+    /** The agenda as a tree (guide 11.8), in the web client's order. */
+    fun agendaTree(items: List<AgendaItem>): List<AgendaNode> {
+        val groups = LinkedHashMap<String, Triple<AgendaNode.Kind, LocalDate?, java.time.YearMonth?>>()
+        val members = HashMap<String, MutableList<AgendaItem>>()
+        for (it in items) {
+            val date = it.task.due!!.date
+            val (key, info) = when {
+                it.days < 0 -> "overdue" to Triple(AgendaNode.Kind.OVERDUE, null, null)
+                it.days == 0L -> "d:$date" to Triple(AgendaNode.Kind.TODAY, date, null)
+                it.days == 1L -> "d:$date" to Triple(AgendaNode.Kind.TOMORROW, date, null)
+                it.days < AGENDA_DAYS -> "d:$date" to Triple(AgendaNode.Kind.DAY, date, null)
+                else -> java.time.YearMonth.from(date).let { m -> "m:$m" to Triple(AgendaNode.Kind.MONTH, null, m) }
+            }
+            groups.getOrPut(key) { info }
+            members.getOrPut(key) { ArrayList() } += it
+        }
+        fun rank(key: String) = if (key == "overdue") "0" else "1" + key.substring(2) + if (key.startsWith("m:")) "-99" else ""
+        return groups.keys.sortedBy(::rank).map { k ->
+            val (kind, date, month) = groups.getValue(k)
+            AgendaNode(k, kind, date, month, members.getValue(k))
+        }
+    }
+
     fun nextDate(date: LocalDate, rule: Repeat): LocalDate = when (rule.unit) {
         "day" -> date.plusDays(rule.every.toLong())
         "week" -> date.plusWeeks(rule.every.toLong())

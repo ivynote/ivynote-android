@@ -415,6 +415,10 @@ interface Strings {
     val reminderChannelHint: String
     fun reminderFrom(title: String): String
     fun daysLeft(days: Long): String
+    /** A day branch of the agenda: 今天 · 11月9日 周一, 11月12日 周三. */
+    fun agendaDay(date: java.time.LocalDate, today: java.time.LocalDate): String
+    /** A month branch: 本月稍后, 12月, 2027年1月. */
+    fun agendaMonth(month: java.time.YearMonth, today: java.time.LocalDate): String
 }
 
 object ZhStrings : Strings {
@@ -814,6 +818,20 @@ object ZhStrings : Strings {
     override val reminderChannel = "待办提醒"
     override val reminderChannelHint = "带日期的待办到点提醒"
     override fun reminderFrom(title: String) = "来自《$title》"
+    override fun agendaDay(date: java.time.LocalDate, today: java.time.LocalDate): String {
+        val wd = arrayOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")[date.dayOfWeek.value - 1]
+        val day = (if (date.year == today.year) "" else "${date.year}年") + "${date.monthValue}月${date.dayOfMonth}日 $wd"
+        return when (date) {
+            today -> "今天 · $day"
+            today.plusDays(1) -> "明天 · $day"
+            else -> day
+        }
+    }
+    override fun agendaMonth(month: java.time.YearMonth, today: java.time.LocalDate): String = when {
+        month == java.time.YearMonth.from(today) -> "本月稍后"
+        month.year == today.year -> "${month.monthValue}月"
+        else -> "${month.year}年${month.monthValue}月"
+    }
     override fun daysLeft(days: Long) = when {
         days == 0L -> "今天"
         days > 0 -> "$days 天后"
@@ -1222,6 +1240,20 @@ object EnStrings : Strings {
     override val reminderChannel = "To-do reminders"
     override val reminderChannelHint = "Dated to-dos when they are due"
     override fun reminderFrom(title: String) = "From “$title”"
+    override fun agendaDay(date: java.time.LocalDate, today: java.time.LocalDate): String {
+        val pattern = if (date.year == today.year) "EEE, MMM d" else "EEE, MMM d, yyyy"
+        val day = date.format(java.time.format.DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH))
+        return when (date) {
+            today -> "Today · $day"
+            today.plusDays(1) -> "Tomorrow · $day"
+            else -> day
+        }
+    }
+    override fun agendaMonth(month: java.time.YearMonth, today: java.time.LocalDate): String {
+        if (month == java.time.YearMonth.from(today)) return "Later this month"
+        val pattern = if (month.year == today.year) "MMMM" else "MMMM yyyy"
+        return month.format(java.time.format.DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH))
+    }
     override fun daysLeft(days: Long) = when {
         days == 0L -> "today"
         days > 0 -> if (days == 1L) "in 1 day" else "in $days days"
